@@ -1,0 +1,1872 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#020617">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Rotation">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<style>:root{color-scheme:dark;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,-apple-system,"Segoe UI",sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>Rotation Station</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one narrow sideline column — sticky tab bar, scoreboard clock, player cards, fixed thumb bar at the bottom. Deliberately single dark "sports hall" theme per spec. */
+:root{
+  --bg:#020617; --panel:#0b1328; --panel2:#111c36; --line:#1f2b46;
+  --fg:#e6ebf5; --muted:#8a97b3; --accent:#f97316; --accent-ink:#1a0a00;
+  --go:#22c55e; --warn:#fbbf24; --bad:#ef4444; --hot:#fb5a73; --cold:#38bdf8;
+  --t1:#f97316; --t2:#a78bfa; --t3:#34d399; --t4:#94a3b8;
+  --display:"Barlow Condensed","Arial Narrow",Impact,sans-serif;
+  --body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{background:var(--bg);color:var(--fg)}
+body{font-family:var(--body);font-size:15px;line-height:1.35;touch-action:pan-y;-webkit-tap-highlight-color:transparent;font-variant-numeric:tabular-nums}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+button,select,input{font:inherit;color:inherit}
+button{touch-action:manipulation;cursor:pointer}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:720px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 120px}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:1px solid var(--line);margin:0 calc(-1 * max(16px,env(safe-area-inset-left,0px)));padding:8px max(16px,env(safe-area-inset-left,0px))}
+.hrow{display:flex;align-items:center;gap:10px;max-width:720px;margin:0 auto}
+.brand{font-family:var(--display);font-weight:700;font-size:20px;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
+.brand span{color:var(--accent)}
+.tabs{display:flex;gap:4px;margin-left:auto}
+.tabs button{min-height:44px;min-width:52px;padding:0 10px;border:1px solid var(--line);background:var(--panel);border-radius:8px;font-family:var(--display);font-size:16px;letter-spacing:.05em;text-transform:uppercase}
+.hrow{min-width:0}.tabs{flex-shrink:0}
+@media (max-width:520px){.brand span{display:none}.brand{font-size:19px}.tabs{gap:3px}.tabs button{min-width:0;padding:0 9px;font-size:15px;letter-spacing:.03em}}
+@media (max-width:340px){.brand{display:none}.tabs{margin-left:0;flex:1}.tabs button{flex:1}}
+.tabs button[aria-selected="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+h2{font-family:var(--display);font-size:22px;letter-spacing:.04em;text-transform:uppercase;margin:20px 0 8px;text-wrap:balance}
+h3{font-family:var(--display);font-size:16px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:18px 0 8px}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+/* status strip */
+.status{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px}
+.per{font-family:var(--display);font-size:24px;letter-spacing:.04em}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;border:1px solid currentColor;white-space:nowrap}
+.chip.warn{color:var(--warn)} .chip.bad{color:var(--bad)} .chip.go{color:var(--go)} .chip.hot{color:var(--hot)} .chip.cold{color:var(--cold)} .chip.acc{color:var(--accent)}
+.sp{flex:1}
+.btn{min-height:48px;padding:0 16px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);font-weight:700}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.ghost{background:transparent}
+.btn.danger{border-color:var(--bad);color:var(--bad);background:transparent}
+.btn[disabled]{opacity:.4;cursor:not-allowed}
+/* clock */
+.clock{display:block;width:100%;margin-top:10px;border-radius:16px;border:2px solid var(--line);background:linear-gradient(180deg,var(--panel2),var(--panel));padding:10px 12px 12px;text-align:center;user-select:none;-webkit-user-select:none}
+.clock .digits{font-family:var(--display);font-weight:700;font-size:clamp(76px,24vw,128px);line-height:1;letter-spacing:.02em}
+.clock .state{font-weight:700;letter-spacing:.12em;font-size:13px;text-transform:uppercase;margin-top:2px}
+.clock.run{border-color:var(--go)} .clock.run .state{color:var(--go)}
+.clock.stop .state{color:var(--warn)}
+.cloaux{display:flex;gap:8px;margin-top:8px}
+.cloaux .btn{flex:1}
+.banner{margin-top:10px;padding:10px 12px;border-radius:10px;font-weight:600;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.banner.pause{background:color-mix(in srgb,var(--warn) 16%,var(--bg));border:1px solid var(--warn);color:var(--warn)}
+.banner.lock{background:color-mix(in srgb,var(--accent) 14%,var(--bg));border:1px solid var(--accent);color:var(--accent)}
+.banner.fdb{flex-direction:column;align-items:stretch}.banner.fdb .pbtns .btn{flex:1}
+.banner.bad{background:color-mix(in srgb,var(--bad) 14%,var(--bg));border:1px solid var(--bad);color:var(--bad)}
+.plannext{margin-top:10px;padding:10px 12px;border:1px dashed var(--line);border-radius:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.plannext .txt{flex:1;min-width:0}
+.plannext{display:grid;gap:8px}
+.plannext.st-overdue{border:1px solid var(--warn);background:color-mix(in srgb,var(--warn) 10%,var(--bg))}
+.plannext.st-overdue .ph b{color:var(--warn)}
+.plannext.st-ready{border:1px solid var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--bg))}
+.plannext.st-ready .ph b{color:var(--accent)}
+.plannext.st-now{border:2px solid var(--go);background:color-mix(in srgb,var(--go) 12%,var(--bg))}
+.plannext.st-now .ph b{color:var(--go)}
+th.halfcol{background:color-mix(in srgb,var(--accent) 10%,var(--panel))}
+.ph b{font-family:var(--display);letter-spacing:.04em;font-size:18px;text-transform:uppercase}
+.swaps{display:grid;gap:4px}
+.swap{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;font-size:15px}
+.swap span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.arr{color:var(--muted)}
+.pbtns{display:flex;gap:8px;flex-wrap:wrap}.pbtns .btn{flex:1}
+.hint{font-family:var(--body);font-size:12px;letter-spacing:0;text-transform:none;font-weight:500;margin-left:6px}
+.tiers{display:grid;gap:8px}
+.scorebar{display:flex;gap:8px;margin-top:10px;align-items:stretch}
+.sb{flex:1;min-width:0;display:flex;align-items:center;justify-content:center;gap:8px;min-height:52px;border-radius:12px;border:1px solid var(--line);background:var(--panel);font-family:var(--display);letter-spacing:.04em}
+.sb b{font-size:28px}.sb .tm{font-size:15px;text-transform:uppercase;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:30%}.sb .dash{color:var(--muted)}
+.tobtn{display:flex;flex-direction:column;justify-content:center;line-height:1.1;padding:0 12px}
+.scgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.sccol{display:grid;gap:8px}.sccol h3{margin:0}
+.btn.big{min-height:60px;font-family:var(--display);font-size:26px}
+.inp{min-height:48px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:0 12px;width:100%;min-width:0}
+pre.rc{white-space:pre-wrap;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px;font:13px/1.45 ui-monospace,Menlo,Consolas,monospace;overflow-x:auto}
+.rcd summary{cursor:pointer;color:var(--muted);margin-top:8px;min-height:32px}
+table.ssn td,table.ssn th{text-align:center}table.ssn td:first-child,table.ssn th:first-child{text-align:left;position:sticky;left:0;background:var(--panel)}
+.bh{background:none;border:0;padding:4px 2px;min-height:44px;min-width:40px;font:inherit;color:inherit;cursor:pointer;border-radius:6px}
+.bh:hover{background:var(--panel2)}
+.picks{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px;margin:8px 0}
+.tog.pick{text-align:left;padding:6px 10px;min-height:44px;color:var(--fg);font-weight:600}
+.tog.pick.on,.tog.pick[aria-pressed="true"]{background:color-mix(in srgb,var(--accent) 28%,var(--bg));border-color:var(--accent);color:#fff}
+.tog.pick.on::before{content:'✓ ';color:var(--accent);font-weight:800}
+.tog.pick:disabled{opacity:.75}
+.lc{display:grid;gap:6px}
+.lcrow{display:flex;flex-wrap:wrap;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.lcl{font-weight:600;flex:1;min-width:120px}.lcv{font-family:var(--display);font-size:24px}
+.hline{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:20px}.hline h2{margin:0;flex:1}
+.btn.sm{min-height:40px;padding:0 12px;font-size:14px}
+.trow{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 10px}
+.tn{flex:1;min-width:0;font-weight:600}
+.step{min-width:48px;min-height:48px;border-radius:10px;border:1px solid var(--line);background:var(--bg);font-size:22px;font-weight:700}
+.tval{font-family:var(--display);font-size:26px;min-width:44px;text-align:center}
+.tval::after{content:"m";font-size:15px;color:var(--muted);margin-left:1px}
+.tbtn{margin-left:10px;min-height:36px;padding:0 12px;border-radius:8px;border:0;background:var(--bg);color:var(--fg);font-weight:700}
+.plannext b{font-family:var(--display);letter-spacing:.04em;font-size:17px}
+.inn{color:var(--go);font-weight:700}.outt{color:var(--bad);font-weight:700}
+/* cards */
+.list{display:grid;gap:8px;grid-template-columns:minmax(0,1fr)}
+.card{min-width:0}
+@media (max-width:360px){.trow{gap:6px;padding:8px}.step{min-width:44px}.tval{min-width:34px;font-size:22px}}
+@media (max-width:380px){.act{min-width:56px;font-size:17px}.more{min-width:34px}.num{min-width:30px;font-size:20px}.r1{gap:5px}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 8px 10px 12px;user-select:none;-webkit-user-select:none}
+.card.on{border-color:#2c3a5c;background:var(--panel2)}
+.card.pending{border-color:var(--warn);animation:pulse 1s ease-in-out infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 3px color-mix(in srgb,var(--warn) 35%,transparent)}}
+@media (prefers-reduced-motion:reduce){.card.pending{animation:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--warn) 35%,transparent)}}
+.r1{display:flex;align-items:center;gap:6px}
+.num{font-family:var(--display);font-size:22px;min-width:34px}
+.nm{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tier{font-size:11px;font-weight:700;padding:2px 6px;border-radius:5px;color:var(--bg)}
+.tier.t1{background:var(--t1)}.tier.t2{background:var(--t2)}.tier.t3{background:var(--t3)}.tier.t4{background:var(--t4)}
+.fbtn,.act,.more{min-height:48px;min-width:48px;border-radius:10px;border:1px solid var(--line);background:var(--bg);font-weight:700}
+.fbtn.risk{border-color:var(--warn);color:var(--warn)}
+.act{min-width:64px;font-family:var(--display);font-size:18px;letter-spacing:.06em}
+.act.out{border-color:var(--bad);color:var(--bad)}
+.act.in{border-color:var(--go);color:var(--go)}
+.card.pending .act.out{background:var(--warn);color:var(--bg);border-color:var(--warn)}
+.more{min-width:40px;color:var(--muted)}
+.r2{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:4px;font-size:13px;color:var(--muted)}
+.bar{position:relative;height:8px;border-radius:4px;background:var(--bg);margin-top:6px;overflow:hidden;border:1px solid var(--line)}
+.bar i{position:absolute;inset:0 auto 0 0;background:var(--accent);border-radius:4px}
+.bar b{position:absolute;top:-1px;bottom:-1px;width:2px;background:var(--fg);opacity:.7}
+.bar.ok i{background:var(--go)} .bar.short i{background:var(--warn)} .bar.way i{background:var(--bad)} .bar.over i{background:var(--cold)}
+.bar.ok{background:color-mix(in srgb,var(--go) 14%,var(--bg))} .bar.short{background:color-mix(in srgb,var(--warn) 18%,var(--bg))} .bar.way{background:color-mix(in srgb,var(--bad) 20%,var(--bg))} .bar.over{background:color-mix(in srgb,var(--cold) 16%,var(--bg))}
+.trk.ok{color:var(--go)} .trk.short{color:var(--warn)} .trk.way{color:var(--bad)} .trk.over{color:var(--cold)}
+.fair{margin:6px 0 8px;line-height:1.6}
+table.pmu th,table.pmu td{padding:6px 5px;font-size:13px}
+#printv{position:fixed;inset:0;z-index:50;overflow:auto;background:#fff;color:#111;padding:16px;font:12px/1.35 system-ui,-apple-system,"Segoe UI",sans-serif}
+#printv[hidden]{display:none}
+#printv h1{font-size:18px;margin:0 0 2px;color:#111;text-transform:none;letter-spacing:0}
+#printv .ps{color:#555;margin:0 0 10px}
+#printv table{border-collapse:collapse;width:100%;margin:6px 0 10px}
+#printv th,#printv td{border:1px solid #999;padding:3px 4px;text-align:center;white-space:nowrap;color:#111;background:#fff}
+#printv th{background:#eee;font-size:11px}
+#printv td.n{text-align:left}
+#printv td.on{background:#cfd8e6;font-weight:800}
+#printv th.q{border-left:2px solid #111}#printv td.q{border-left:2px solid #111}
+#printv .boxes{letter-spacing:3px;font-size:14px}
+#printv .pgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+#printv pre{white-space:pre-wrap;font:10px/1.3 ui-monospace,Menlo,Consolas,monospace;margin:0;color:#111}
+#printv .pbar{display:flex;gap:8px;margin-bottom:10px}
+#printv .pbar button{min-height:44px;padding:0 16px;border-radius:10px;border:1px solid #333;background:#111;color:#fff;font-weight:700}
+#printv .pbar button.g{background:#fff;color:#111}
+@media (max-width:600px){#printv .pgrid{grid-template-columns:1fr}}
+/* tablets: use the width — wider page, on court and bench side by side */
+@media (min-width:900px){
+  .wrap,.hrow,.dock .in{max-width:1120px}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:0 18px;align-items:start}
+  .cols .col>h3:first-child{margin-top:16px}
+  .fields{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+}
+@media print{html,body{background:#fff!important}body>*:not(#printv){display:none!important}#printv{position:static;padding:0;overflow:visible;font-size:11px}#printv th,#printv td{padding:2px 3px}#printv table{margin:4px 0 6px}#printv pre{font-size:9px;line-height:1.25}#printv .pbar{display:none}@page{size:A4 landscape;margin:10mm}}
+.flash{position:fixed;inset:0;pointer-events:none;z-index:40;border-radius:0;transition:box-shadow .3s}
+.flash.ready{box-shadow:inset 0 0 0 6px var(--warn),inset 0 0 40px 8px color-mix(in srgb,var(--warn) 45%,transparent)}
+.flash.now{box-shadow:inset 0 0 0 8px var(--go),inset 0 0 60px 14px color-mix(in srgb,var(--go) 55%,transparent);animation:fpulse 1s ease-in-out infinite}
+.flash.overdue,.flash.foul4,.flash.run{box-shadow:inset 0 0 0 8px var(--bad),inset 0 0 60px 14px color-mix(in srgb,var(--bad) 55%,transparent);animation:fpulse .7s ease-in-out infinite}
+.flash.hit{background:color-mix(in srgb,var(--fc,#fff) 30%,transparent)}
+@keyframes fpulse{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.flash{animation:none!important}}
+.glance{position:fixed;inset:0;z-index:15;background:var(--bg);display:flex;flex-direction:column;gap:12px;padding:calc(env(safe-area-inset-top,0px) + 12px) 16px calc(env(safe-area-inset-bottom,0px) + 16px);overflow:auto}
+.glance .gtop{display:flex;align-items:center;gap:8px;font-weight:700;color:var(--muted);font-size:16px}
+.glance .gtop .sp{flex:1}
+.glance .gclock{flex:0 0 auto;border:2px solid var(--line);border-radius:18px;background:var(--panel);color:var(--fg);padding:8px 0 10px;text-align:center}
+.glance .gclock.run{border-color:var(--go)}.glance .gclock.stop{border-color:var(--warn)}
+.glance .gclock .digits{font:800 clamp(72px,26vw,140px)/1 var(--display,system-ui);font-variant-numeric:tabular-nums;letter-spacing:.02em}
+.glance .gclock .state{font-weight:700;font-size:15px;color:var(--muted);margin-top:4px}
+.glance .gnext{border-radius:16px;border:2px solid var(--line);background:var(--panel);padding:12px 14px}
+.glance .gnext.st-ready{border-color:var(--warn)}.glance .gnext.st-now{border-color:var(--go)}.glance .gnext.st-overdue{border-color:var(--bad)}
+.glance .gnext .gh{font-size:20px;font-weight:800;margin-bottom:8px}
+.glance .gnext .gh .muted{font-weight:600;font-size:16px}
+.glance .grow{display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:center;font-size:clamp(17px,5vw,22px);font-weight:700;padding:3px 0}
+.glance .grow span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.glance .grow.ghd{font-size:13px;letter-spacing:.08em;padding:0}
+.glance .grow .o{color:var(--bad)}.glance .grow .i{color:var(--go)}
+.glance .gbtn{min-height:64px;font-size:22px;width:100%;margin-top:10px}
+.glance .gwarn{border-radius:14px;padding:10px 12px;font-weight:700;font-size:17px;background:color-mix(in srgb,var(--bad) 16%,var(--bg));border:1px solid var(--bad);color:var(--fg)}
+.glance .gexit{margin-top:auto}
+.glance .gclock .digits{font-size:clamp(60px,20vw,112px)}
+.gpanel{display:flex;flex-direction:column;gap:8px}
+.gsrow{display:grid;grid-template-columns:minmax(52px,1fr) minmax(40px,48px) repeat(3,minmax(46px,60px));gap:6px;align-items:center}
+.gsrow .gsl{display:flex;flex-direction:column;min-width:0;font-weight:700;font-size:12px;line-height:1.1}.gsrow .gsl b{font-size:26px}.gsrow .gsl span{text-transform:uppercase;letter-spacing:.04em;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
+.gsrow .btn{min-height:48px;font-size:18px;font-weight:800;padding:0}
+.gfl{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;align-items:stretch}
+.gfl>.muted{grid-column:1/-1}
+.gf{min-height:48px;display:flex;flex-direction:column;justify-content:center;gap:0;font-weight:800;font-size:16px;padding:2px 4px;line-height:1.1}
+.gf span{font-size:12px;font-weight:700;color:var(--muted)}
+.gf em{font-style:normal;font-size:12px;font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gf b{font-size:16px}
+.gf.warn{border-color:var(--warn)}.gf.warn span{color:var(--warn)}.gf.bad{border-color:var(--bad)}.gf.bad span{color:var(--bad)}
+.gsrow .btn.gm{color:var(--muted);font-size:16px}
+.whos{border:1px solid var(--accent);border-radius:12px;padding:8px;margin:8px 0;background:color-mix(in srgb,var(--accent) 10%,var(--bg))}
+.whog{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:6px}.whog .btn{min-height:44px;padding:4px;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gdl{display:flex;flex-direction:column;gap:6px;max-height:52vh;overflow:auto}
+.gdr{display:grid;grid-template-columns:1fr 52px;gap:6px}.gdr .gdh{text-align:left;justify-content:flex-start;min-height:46px}
+.gdr .gdh[aria-pressed="true"]{border-color:var(--go)}.gdr.off .gdh{opacity:.55;text-decoration:line-through}
+.htc{border:1px solid var(--line);border-radius:12px;padding:10px;margin:8px 0;background:var(--panel)}.htr{margin:4px 0;line-height:1.5}
+.gundo{min-height:46px;font-size:15px}
+.barkey{display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:6px}.barkey i{display:inline-block;width:10px;height:6px;border-radius:3px;margin-right:4px;vertical-align:middle}
+/* bottom bar */
+.dock{position:fixed;left:0;right:0;bottom:0;z-index:6;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(6px);border-top:1px solid var(--line);padding:10px max(16px,env(safe-area-inset-right,0px)) calc(10px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.dock .in{max-width:720px;margin:0 auto;display:flex;gap:10px}
+.dock .btn{flex:1;min-width:0}
+.undob{display:flex;flex-direction:column;justify-content:center;line-height:1.1}
+.undob .ul{font-size:12px;font-weight:500;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+/* sheet */
+.scrim{position:fixed;inset:0;z-index:20;background:rgba(2,6,23,.72);display:flex;align-items:flex-end;justify-content:center}
+.sheet{width:100%;max-width:720px;background:var(--panel);border-top:2px solid var(--accent);border-radius:18px 18px 0 0;padding:16px max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));max-height:85vh;overflow:auto}
+.sheet h2{margin-top:0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.stack{display:grid;gap:8px}
+/* setup */
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:12px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{font-family:var(--display);font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-size:13px;background:var(--panel)}
+td input[type=text],td input[type=number]{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px;min-height:40px}
+td select,.field select,.field input{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px;min-height:44px}
+.tog{min-height:40px;min-width:48px;border-radius:8px;border:1px solid var(--line);background:var(--bg);font-weight:700;font-size:13px;color:var(--muted)}
+.tog[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.tog.c[aria-pressed="true"]{background:var(--fg);border-color:var(--fg);color:var(--bg)}
+.sec{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin:10px 0;overflow:hidden}
+.sec.secwarn{border-color:var(--warn)}
+.sechd{all:unset;box-sizing:border-box;display:grid;grid-template-columns:1fr auto;grid-template-areas:"t c" "s c";gap:2px 10px;width:100%;padding:12px 14px;cursor:pointer;min-height:56px}
+.sechd:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.sechd .st{grid-area:t;font-family:var(--display);font-size:19px;letter-spacing:.04em;text-transform:uppercase}
+.sec.secwarn .st{color:var(--warn)}
+.sechd .ss{grid-area:s;color:var(--muted);font-size:13px;overflow-wrap:anywhere}
+.sechd .chev{grid-area:c;align-self:center;font-size:18px;color:var(--muted)}
+.secbd{padding:0 12px 12px;border-top:1px solid var(--line)}
+.secbd h3{font-family:var(--display);font-size:15px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:14px 0 8px}
+.secbd .hline{margin-top:14px}.secbd .hline h3{margin:0;flex:1}
+.secbd .field{background:var(--bg)}
+.secbd>.fields:first-child,.secbd>.status:first-child{margin-top:12px}
+.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.field{display:grid;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px}
+.field label{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.seg{display:flex;gap:4px;flex-wrap:wrap}
+.seg button{min-height:44px;min-width:48px;padding:0 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);font-weight:700}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+/* plan grid */
+.pg td,.pg th{padding:4px 5px;text-align:center}
+.pg td:first-child,.pg th:first-child{text-align:left;position:sticky;left:0;background:var(--panel);z-index:1}
+.cell{display:block;width:22px;height:22px;border-radius:5px;margin:auto;background:transparent;border:1px solid var(--line)}
+.cell.f1{background:var(--t1);border-color:var(--t1)}.cell.f2{background:var(--t2);border-color:var(--t2)}.cell.f3{background:var(--t3);border-color:var(--t3)}.cell.f4{background:var(--t4);border-color:var(--t4)}
+.past .cell{opacity:.35}
+th.curcol,td.curcol{background:color-mix(in srgb,var(--go) 12%,var(--panel))}
+.lowcore{color:var(--warn);font-weight:700}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:13px;color:var(--muted);margin:8px 0}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
+/* logs */
+.log{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:6px 12px;max-height:340px;overflow:auto;font-size:14px}
+.log div{padding:6px 0;border-bottom:1px solid var(--line)}
+.log div:last-child{border-bottom:0}
+.log .t{color:var(--muted);font-size:12px;margin-right:8px}
+.log .rp{color:var(--accent)}
+textarea{width:100%;min-height:200px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:12px;padding:10px;font:13px/1.45 ui-monospace,Menlo,Consolas,monospace}
+.toast{position:fixed;left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));margin:0 auto;width:fit-content;max-width:688px;bottom:calc(86px + env(safe-area-inset-bottom,0px));z-index:30;background:var(--fg);color:var(--bg);padding:10px 14px;border-radius:12px;font-weight:600;display:flex;align-items:center;gap:10px;line-height:1.3;box-shadow:0 6px 24px rgba(0,0,0,.45)}
+.toast .tbtn{flex-shrink:0;margin-left:0}
+.toast[hidden]{display:none}   /* display:flex above would otherwise beat the hidden attribute */
+.note{font-size:13px;color:var(--muted);margin-top:8px;max-width:65ch}
+</style>
+
+<div class="wrap">
+  <header><div class="hrow">
+    <div class="brand" aria-label="Rotation Station"><svg width="30" height="30" aria-hidden="true" style="vertical-align:-7px;margin-right:6px" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320"><path d="M224 49.1 A128 128 0 0 1 160 288M96 270.9 A128 128 0 0 1 160 32" fill="none" stroke="#e6ebf5" stroke-width="16" stroke-linecap="round"/><polygon points="134,288 166,265 166,311" fill="#e6ebf5"/><polygon points="186,32 154,9 154,55" fill="#e6ebf5"/><circle cx="160" cy="160" r="86" fill="#f97316"/><path d="M160 74V246M74 160H246M99 99Q133 160 99 221M221 99Q187 160 221 221" fill="none" stroke="#0b1328" stroke-width="7" stroke-linecap="round"/></svg> <span>Rotation Station</span></div>
+    <nav class="tabs" role="tablist">
+      <button data-act="tab:setup" role="tab">Setup</button>
+      <button data-act="tab:plan" role="tab">Plan</button>
+      <button data-act="tab:live" role="tab">Live</button>
+      <button data-act="tab:logs" role="tab">Logs</button>
+    </nav>
+  </div></header>
+  <main id="main"></main>
+</div>
+<div id="dock"></div>
+<div id="sheet"></div>
+<div id="toast" class="toast" hidden></div>
+<div id="flash" class="flash" aria-hidden="true"></div>
+<div id="printv" hidden></div>
+
+<script>
+'use strict';
+const KEY='pumas_match_state_v2';
+const TIERNAME={1:'Core / closers',2:'Main rotation',3:'Development',4:'Emerging'};
+/*SEED-START*/
+const SEED=[[4,'Player A',1],[5,'Player B',1],[6,'Player C',1],[7,'Player D',1],[8,'Player E',2],[9,'Player F',2],[10,'Player G',2],[11,'Player H',2],[12,'Player I',3],[13,'Player J',4],[14,'Player K',4],[15,'Player L',4]];
+const SEED_STARTERS=[4,5,6,7,8],SEED_CLOSERS=[4,5,6,7,8],SEED_BH=[4,5,8,13],SEED_OUT=[];
+const TEAM_DEFAULT={teamName:"Us",teamFull:"My Team U16"};
+const APP_NAME="Rotation Station",ABOUT={tip:"https://ko-fi.com/rotationstation",tipLabel:"Buy me a coffee",contact:"",site:""};
+/*SEED-END*/
+const DEF_CFG={tierMins:{1:20,2:15,3:10,4:6},quarterMins:8,shiftLength:4,strongFloor:3,closerLockSeconds:240,otLengthMins:4,lockOT:true,hotBonusMode:false,hotBonusMins:3,devFloorMins:4,coldTrimMins:2,miniSubs:1,readySecs:60,onTimeSecs:45,restMaxMins:8,foulAware:'gentle',spreadLow:true,t1Floor:2,catchUp:2,haptics:'strong',flash:true,maxSubs:3,maxSubsBreaks:true,bhFloor:1,...TEAM_DEFAULT};
+const today=()=>{const d=new Date();return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear()};
+const blankStat=()=>({playedSeconds:0,periodSplit:[],fouls:0,consecutiveSeconds:0,fouledOut:false});
+
+const qLen=prev=>Math.round(((prev&&prev.config&&+prev.config.quarterMins)||DEF_CFG.quarterMins)*60);
+function freshMatch(prev){
+  const roster=prev?prev.roster.map(p=>({...p,hot:false,cold:false})):SEED.map(([num,name,tier])=>({id:'p'+num,num,name,tier,active:!SEED_OUT.includes(num),hot:false,cold:false,starter:SEED_STARTERS.includes(num),bh:SEED_BH.includes(num)}));
+  const stats={};roster.forEach(p=>stats[p.id]=blankStat());
+  return {schemaVersion:2,config:prev?{...DEF_CFG,...prev.config,tierMins:{...DEF_CFG.tierMins,...prev.config.tierMins}}:{...DEF_CFG,tierMins:{...DEF_CFG.tierMins}},roster,
+    closersIds:prev?prev.closersIds.slice():SEED_CLOSERS.map(n=>'p'+n),
+    periods:Array(4).fill(qLen(prev)),period:1,clockSeconds:qLen(prev),clockRunning:false,lastTickTime:Date.now(),
+    started:false,finished:false,pausedAt:null,onCourtIds:[],plan:{},fixed:{},applied:{},halves:{},pinned:{},moves:{},stats,adj:{},subLogs:[],undo:[],score:{us:0,them:0,ev:[]},tos:[],archived:false,foulAck:{},tf:{},tfThem:{},lineSecs:{},
+    match:{opp:prev?prev.match.opp:'',date:today(),id:'g'+Date.now().toString(36),practice:false}};
+}
+let S;
+try{const raw=localStorage.getItem(KEY);if(raw){const o=JSON.parse(raw);if(o&&o.schemaVersion===2)S=o}}catch(e){}
+if(!S)S=freshMatch();
+S.config=(c=>{if(c&&c.foulAware===true)c.foulAware='gentle';if(c&&c.foulAware===false)c.foulAware='off';return c})(S.config||{});
+S.config={...DEF_CFG,...S.config,tierMins:{...DEF_CFG.tierMins,...(S.config||{}).tierMins}};S.fixed=S.fixed||{};S.applied=S.applied||{};S.halves=S.halves||{};S.pinned=S.pinned||{};S.moves=S.moves||{};S.score=S.score||{us:0,them:0,ev:[]};S.foulAck=S.foulAck||{};S.undo=Array.isArray(S.undo)?S.undo:[];S.subLogs=Array.isArray(S.subLogs)?S.subLogs:[];S.adj=S.adj||{};S.plan=S.plan||{};S.tos=S.tos||[];S.tf=S.tf||{};S.lineSecs=S.lineSecs||{};if(S.roster.every(p=>p.bh===undefined))S.roster.forEach(p=>p.bh=SEED_BH.includes(p.num));S.tfThem=S.tfThem||{};if(!S.match.id)S.match.id='g'+Date.now().toString(36);
+const ui={tab:S.started?'live':'setup',pendingOut:null,sheet:null,sheetId:null,lpFired:false,lpUp:0,hotConfirm:null};
+let lastSave=0;
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}lastSave=Date.now()}
+
+/* ---------- helpers ---------- */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const sum=a=>a.reduce((x,y)=>x+y,0);
+const P=id=>S.roster.find(p=>p.id===id);
+const st=id=>(S.stats[id]||(S.stats[id]=blankStat()));
+const played=id=>st(id).playedSeconds;
+const tierOf=id=>(P(id)||{tier:4}).tier;
+const len=()=>S.periods[S.period-1];
+const qLabel=p=>p<=4?'Q'+p:'OT'+(p-4);
+const mmss=s=>{s=Math.max(0,Math.ceil(s-1e-6));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')};
+const mmssShort=s=>{s=Math.max(0,Math.round(s));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
+const m1=x=>(Math.round(x*10)/10).toFixed(1);
+const mt=x=>{const v=Math.round(x*10)/10;return Number.isInteger(v)?String(v):v.toFixed(1)};
+const tag=id=>{const p=P(id);return p?'#'+p.num+' '+p.name:'?'};
+const elapsedAbs=()=>sum(S.periods.slice(0,S.period-1))+(len()-S.clockSeconds);
+const clockLabel=()=>qLabel(S.period)+' '+mmss(S.clockSeconds);
+function log(text,kind){const d=new Date();S.subLogs.push({time:d.toTimeString().slice(0,8),text,kind:kind||''})}
+function hideToast(){const el=$('#toast');if(el){el.hidden=true;clearTimeout(toast.h)}}
+function toast(t,act,label){const el=$('#toast');el.innerHTML=esc(t)+(act?` <button class="tbtn" data-act="${act}">${label||'Undo'}</button>`:'');el.hidden=false;clearTimeout(toast.h);toast.h=setTimeout(()=>el.hidden=true,act?4500:2200)}
+const curBlock=()=>{const now=elapsedAbs();return blocksAll().find(b=>b.abs0<now&&now<b.abs1)};
+const snap=()=>({applied:{...S.applied},fixed:JSON.parse(JSON.stringify(S.fixed)),plan:JSON.parse(JSON.stringify(S.plan||{})),halves:{...(S.halves||{})},early:{...(S.early||{})}});
+const restoreSnap=u=>{if(u.applied)S.applied=u.applied;if(u.fixed)S.fixed=u.fixed;if(u.plan)S.plan=u.plan;if(u.halves)S.halves=u.halves;if(u.early)S.early=u.early};
+const availList=()=>S.roster.filter(p=>p.active&&!st(p.id).fouledOut);
+function foulRisk(id){const s=st(id);if(s.fouledOut)return false;const f=s.fouls;return f>=4||(S.period<=2&&f>=2)||(S.period<=3&&f>=3)}
+function inLockLive(){const L=S.config.closerLockSeconds;if(!L)return false;if(S.period===4)return S.clockSeconds<=L&&S.clockSeconds>0;if(S.period>4)return S.config.lockOT;return false}
+
+/* ---------- §2.2 targets ---------- */
+const wt=p=>Math.max(0,+S.config.tierMins[p.tier]||0);
+// the lowest tier playing today is protected: rounding, hot bonuses and rebalancing never take minutes from it
+const protectedTier=()=>{const t=availList().map(p=>p.tier);return t.length?Math.max(...t):0};
+function baseTargets(){
+  const pool=5*sum(S.periods)/60,T={},av=availList(),ids=new Set(av.map(p=>p.id));
+  let frozen=0;
+  S.roster.forEach(p=>{if(!ids.has(p.id)){T[p.id]=played(p.id)/60;frozen+=T[p.id]}});
+  const rem=Math.max(0,pool-frozen),ws=sum(av.map(p=>wt(p)));
+  av.forEach(p=>T[p.id]=ws?Math.round(wt(p)/ws*rem*2)/2:0);
+  let d=rem-sum(av.map(p=>T[p.id]));
+  const pt=protectedTier(),hiFirst=[...av].sort((a,b)=>a.tier-b.tier),loFirst0=[...av].filter(p=>p.tier!==pt).sort((a,b)=>b.tier-a.tier),loFirst=loFirst0.length?loFirst0:[...av];
+  let i=0,g=0;
+  while(Math.abs(d)>=0.5&&av.length&&g++<1000){
+    if(d>0){T[hiFirst[i%hiFirst.length].id]+=.5;d-=.5}
+    else{const p=loFirst[i%loFirst.length];if(T[p.id]>=.5){T[p.id]-=.5;d+=.5}}
+    i++;
+  }
+  return T;
+}
+// Season catch-up: a player more than a minute a game behind his season target gets back half of what he's owed
+// this game (capped), taken half a minute at a time from players who aren't behind, top tier first; the lowest tier never gives.
+let cuCache={k:null,v:null};
+function seasonOwed(){   // num → minutes owed (season minutes short of season target), from games other than this one
+  let raw='';try{raw=localStorage.getItem(SEASON_KEY)||''}catch(e){}
+  const k=raw+'|'+S.match.id;if(cuCache.k===k)return cuCache.v;
+  const out={};seasonLoad().games.filter(g=>g.id!==S.match.id&&!g.practice).forEach(g=>g.players.forEach(p=>{if(p.tgt>0){const o=out[p.num]||(out[p.num]={dt:0,gt:0});o.dt+=p.mins-p.tgt;o.gt++}}));
+  cuCache={k,v:out};return out;
+}
+function catchUp(){
+  const cap=+S.config.catchUp||0,res={give:{},take:{}};if(!cap)return res;
+  const owed=seasonOwed(),av=availList(),pt=protectedTier();
+  av.forEach(p=>{const o=owed[p.num];if(o&&o.gt&&o.dt/o.gt< -1){const b=Math.min(cap,Math.floor(-o.dt/2*2)/2);if(b>=0.5)res.give[p.id]=b}});
+  let need=sum(Object.values(res.give));if(!need)return res;
+  const donors=av.filter(p=>!res.give[p.id]&&p.tier!==pt&&!p.cold).sort((a,b)=>a.tier-b.tier||a.num-b.num),dcap=2;
+  let moved=true;while(need>=0.5&&moved){moved=false;for(const d of donors){if(need<0.5)break;if((res.take[d.id]||0)+0.5<=dcap){res.take[d.id]=(res.take[d.id]||0)+0.5;need-=0.5;moved=true}}}
+  if(need>=0.5){   // not enough donors: trim the bonuses, biggest first
+    const ids=Object.keys(res.give).sort((a,b)=>res.give[b]-res.give[a]);let g=0;while(need>=0.5&&g++<200)for(const id of ids){if(need<0.5)break;if(res.give[id]>=0.5){res.give[id]-=0.5;need-=0.5}}
+    Object.keys(res.give).forEach(id=>{if(!res.give[id])delete res.give[id]});
+  }
+  return res;
+}
+function targets(){
+  const T=baseTargets(),ids=new Set(availList().map(p=>p.id));
+  const ptier=protectedTier();
+  Object.values(S.adj).forEach(ev=>Object.entries(ev).forEach(([id,m])=>{if(!ids.has(id))return;if(m<0&&P(id).tier===ptier&&!P(id).cold)return;   // the lowest tier never lends
+    T[id]=Math.max(0,T[id]+m)}));
+  const cu=catchUp();Object.entries(cu.give).forEach(([id,m])=>T[id]+=m);Object.entries(cu.take).forEach(([id,m])=>T[id]=Math.max(0,T[id]-m));
+  // hot/cold moves can lose minutes (a player they were shared with got injured, or a target hit zero): rebalance to the pool
+  const av=availList().filter(p=>!p.hot&&!p.cold),pool=5*sum(S.periods)/60;
+  let d=pool-sum(S.roster.map(p=>T[p.id]||0)),i=0,g=0;
+  const pt=protectedTier(),hi=[...av].sort((a,b)=>a.tier-b.tier),lo0=[...av].filter(p=>p.tier!==pt).sort((a,b)=>b.tier-a.tier),lo=lo0.length?lo0:[...av];
+  while(d>=0.5&&av.length&&g++<1000){T[hi[i%hi.length].id]+=.5;d-=.5;i++}
+  // too many minutes: take them from regular players, then from ❄️ players, never below what he's already played and never from the protected tier
+  const coldOnes=availList().filter(p=>p.cold&&p.tier!==pt);
+  for(const pool2 of [lo,coldOnes]){
+    let moved=true;
+    while(d<=-0.5&&moved){moved=false;for(const p of pool2){if(d>-0.5)break;if(T[p.id]-.5>=played(p.id)/60-1e-9){T[p.id]-=.5;d+=.5;moved=true}}}
+  }
+  // "keep N core on court" can need more core minutes than the tier minutes give them. Then the bench pays for it,
+  // levelled down from the top: the bench player with the most minutes gives first, so a T3 never drops below a T4.
+  const cs=coreShort(T);
+  if(cs.short>=0.5){
+    const core=cs.core,bench=av.filter(p=>p.tier>2);let need=cs.short,g2=0;
+    while(need>=0.5&&g2++<2000){
+      const can=bench.filter(p=>T[p.id]-.5>=Math.max(played(p.id)/60,0)-1e-9);if(!can.length)break;
+      const top=Math.max(...can.map(p=>T[p.id]));const giver=can.filter(p=>T[p.id]===top).sort((x,y)=>(x.tier===pt)-(y.tier===pt)||y.tier-x.tier)[0];
+      T[giver.id]-=.5;need-=.5;
+      const taker=[...core].sort((x,y)=>T[x.id]-T[y.id])[0];T[taker.id]+=.5;
+    }
+  }
+  return T;
+}
+// minutes the core (T1/T2) needs to keep the "core on court" floor, against what the tier minutes give them
+function coreShort(T){
+  const av=availList().filter(p=>!p.cold),core=av.filter(p=>p.tier<=2),fl=Math.min(+S.config.strongFloor||0,core.length,5);
+  // the closers lock is its own case: every core closer is on for all of it, however many that is
+  const L4=S.periods[3]||0,lk=Math.min(L4,+S.config.closerLockSeconds||0)/60;
+  const cc=lk?Math.max(fl,(S.closersIds||[]).filter(id=>core.some(p=>p.id===id)).length):fl;
+  const need=fl*(sum(S.periods)/60-lk)+cc*lk,have=sum(core.map(p=>T[p.id]||0));
+  return {core,floor:fl,need,have,short:Math.max(0,need-have),lockCore:cc>fl};
+}
+function coreWarn(){
+  if(!S.config.strongFloor)return '';
+  const cs=coreShort(baseTargets());if(cs.short<0.5)return '';
+  return `Keep ${cs.floor} core on court needs ${mt(cs.need)} core minutes, but your tier minutes only give the core ${mt(cs.have)}.${cs.lockCore?' (That includes the closers lock, where all '+(S.closersIds||[]).filter(id=>cs.core.some(p=>p.id===id)).length+' of your closers are core.)':''} The bench loses ${mt(cs.short)} min between them, shared from the top so nobody drops below a lower tier. For full bench minutes, set it to ${cs.floor-1}${cs.lockCore?', pick a bench player as a closer':''} or raise T1/T2 minutes.`;
+}
+
+/* ---------- §2.3 blocks + solver (advisory) ---------- */
+function baseBlocks(){
+  const out=[],step=S.config.shiftLength*60;let abs=0;
+  S.periods.forEach((L,pi)=>{
+    const p=pi+1;
+    if(p>4){out.push({p,s:0,e:L,dur:L,abs0:abs,abs1:abs+L,key:p+'-0'})}
+    else{
+      const lockAt=p===4&&S.config.closerLockSeconds>0?Math.max(0,L-S.config.closerLockSeconds):L;
+      const cuts=[];for(let s=0;s<lockAt;s+=step)cuts.push(s);
+      if(cuts.length>1&&lockAt-cuts[cuts.length-1]<step/2)cuts.pop();   // fold a stub shift into the one before
+      if(lockAt<L)cuts.push(lockAt);
+      // a coach can move a change earlier/later; the block keeps its original key so plans and pins survive the move
+      const mv=S.moves||{},adj=cuts.slice();
+      for(let i=1;i<cuts.length;i++){
+        if(cuts[i]===lockAt&&lockAt<L)continue;                       // the closers lock start doesn't move
+        const want=cuts[i]+(+mv[p+'-'+cuts[i]]||0),nextOrig=i+1<cuts.length?cuts[i+1]:L;
+        adj[i]=Math.max(adj[i-1]+60,Math.min(nextOrig-60,want));
+      }
+      cuts.forEach((s0,i)=>{const s1=adj[i],e=i+1<cuts.length?adj[i+1]:L;out.push({p,s:s1,e,dur:e-s1,abs0:abs+s1,abs1:abs+e,key:p+'-'+s0,orig:s0,movable:i>0&&!(s0===lockAt&&lockAt<L)})});
+    }
+    abs+=L;
+  });
+  return out;
+}
+// A "half" (mini sub) splits one block at its midpoint; the second half differs from the first by exactly one player.
+function blocksAll(halves){
+  halves=halves||S.halves||{};const out=[];
+  baseBlocks().forEach(b=>{
+    if(halves[b.key]&&!inLockBlock(b)&&b.p<=4&&b.dur>=180){
+      const mid=b.s+Math.round(b.dur/2/30)*30;
+      out.push({...b,e:mid,dur:mid-b.s,abs1:b.abs0+(mid-b.s),parent:b.key,half:1});
+      out.push({...b,s:mid,dur:b.e-mid,abs0:b.abs0+(mid-b.s),key:b.key+'h',parent:b.key,half:2,movable:false});
+    }else out.push({...b,parent:b.key});
+  });
+  return out;
+}
+const blockLabel=b=>qLabel(b.p)+' '+mmssShort(S.periods[b.p-1]-b.s)+'–'+mmssShort(S.periods[b.p-1]-b.e);
+function inLockBlock(b){const L=S.config.closerLockSeconds;if(!L)return false;if(b.p===4)return b.s>=S.periods[3]-L;if(b.p>4)return S.config.lockOT;return false}
+
+// ball-handler floor, limited to how many tagged ball-handlers are available
+// the lowest tier's ball-handlers count only if nobody else can do it (forcing them on would cost the other lowest-tier players minutes)
+function bhPool(){const av=availList(),pt=protectedTier(),hi=av.filter(p=>p.bh&&!(pt>=3&&p.tier===pt));return hi.length?hi:av.filter(p=>p.bh)}
+const isBHp=p=>!!p&&bhPool().includes(p);
+function bhFloorEff(){const f=+S.config.bhFloor||0;return Math.min(f,bhPool().length)}
+function solvePlan(halves,T){
+  const B=blocksAll(halves),now=elapsedAbs(),av=availList(),ids=new Set(av.map(p=>p.id));
+  const plan=JSON.parse(JSON.stringify(S.plan)),oldPlan=S.plan;
+  const R={};av.forEach(p=>R[p.id]=(T[p.id]||0)*60-played(p.id));
+  const cur=B.find(b=>b.abs0<now&&now<b.abs1);
+  if(cur){if(!plan[cur.key]||plan[cur.key].some(id=>!ids.has(id)))plan[cur.key]=S.onCourtIds.slice();const r=cur.abs1-now;S.onCourtIds.forEach(id=>{if(id in R)R[id]-=r})}
+  let prev=S.started?S.onCourtIds.slice():[];
+  const fut=B.filter(b=>b.abs0>=now);
+  const closers=S.closersIds.filter(id=>ids.has(id)).slice(0,5);
+  const forced={},lockKeys=new Set();
+  fut.forEach(b=>{if(S.fixed[b.key])forced[b.key]=S.fixed[b.key].filter(id=>ids.has(id))});
+  fut.forEach(b=>{if(!S.fixed[b.key]&&inLockBlock(b)&&closers.length){forced[b.key]=closers;lockKeys.add(b.key);closers.forEach(id=>R[id]-=b.dur)}});
+  if(!S.started&&fut[0]&&fut[0].abs0===0&&!forced[fut[0].key]){
+    const starters=S.roster.filter(p=>p.starter&&ids.has(p.id)).map(p=>p.id).slice(0,5);
+    if(starters.length)forced[fut[0].key]=starters;
+  }
+  const firstKey=fut[0]&&fut[0].key,floor=S.config.strongFloor,t1Floor=+S.config.t1Floor||0,bhF=bhFloorEff(),bhSet=new Set(bhPool().map(p=>p.id)),isBH=id=>bhSet.has(id);
+  const pt0=protectedTier(),lowT=S.config.spreadLow&&pt0>=3?pt0:0,LOWPEN=450;   // keep the lowest tier (T4s) on court one at a time where possible
+  // fair-share pacing: score = minutes still owed minus what he'd still be owed if he were exactly on pace
+  const isLock=b=>lockKeys.has(b.key);
+  const U=sum(B.filter(b=>!isLock(b)).map(b=>b.dur))||1;
+  const lockedFut={};av.forEach(p=>lockedFut[p.id]=0);
+  fut.forEach(b=>{if(isLock(b))(forced[b.key]||[]).forEach(id=>lockedFut[id]+=b.dur)});
+  const Tn=id=>(T[id]||0)*60-lockedFut[id];
+  let cumU=sum(B.filter(b=>!isLock(b)&&b.abs1<=(fut[0]?fut[0].abs0:now)).map(b=>b.dur));
+  // rest guard: track how long each player will have been on when a block ends
+  const restLim=(+S.config.restMaxMins||0)*60,consec={};
+  av.forEach(p=>consec[p.id]=S.onCourtIds.includes(p.id)?st(p.id).consecutiveSeconds+(cur?cur.abs1-now:0):0);
+  let lastP=cur?cur.p:S.period;
+  const fa=S.config.foulAware;
+  const foulPen=(p,b)=>{if(!fa||fa==='off'||isLock(b))return 0;
+    if(fa!=='strict'&&b.key===firstKey)return 0;            // gentle: never change the very next sub because of fouls
+    const f=st(p.id).fouls;
+    return f>=4?420:f>=3&&b.p<=3?300:f>=2&&b.p<=2?300:0};   // push foul trouble later, keep him for Q4
+  fut.forEach((b,bi)=>{
+    if(b.p!==lastP){av.forEach(p=>consec[p.id]=0);lastP=b.p}   // the quarter break is a rest
+    const nb=fut[bi+1],lockNext=nb&&isLock(nb)&&nb.p===b.p?nb:null;  // a closer who comes on now stays on through the lock
+    if(!isLock(b))cumU+=b.dur;
+    const frac=Math.min(1,cumU/U);
+    const scoreOf=p=>{
+      let sc=R[p.id]-Tn(p.id)*(1-frac);       // how far behind his fair share he'd be after this block
+      if((oldPlan[b.key]||[]).includes(p.id))sc+=20; // stickiness: don't reshuffle the plan over small changes
+      if(p.hot&&b.abs0<(p.hotUntil||0))sc+=1e6;  // hot: keep him on through the next block, rest pushed later
+      if(p.cold&&b.key===firstKey)sc-=1e6;      // cold: sit him in the very next block
+      if(!prev.includes(p.id))sc+=0.5;          // fatigue tie-break: prefer whoever sat last block
+      const ahead=lockNext&&(forced[lockNext.key]||[]).includes(p.id)?lockNext.dur:0;
+      if(restLim&&(consec[p.id]>0||ahead)&&consec[p.id]+b.dur+ahead>restLim&&!p.hot)sc-=120;   // rest guard (soft: targets still win when they must)
+      sc-=foulPen(p,b);
+      if(p.tier===pt0&&pt0>=3&&R[p.id]>0)sc+=2*R[p.id]*frac;   // the lowest tier gets its minutes first as the game runs out
+      return sc;
+    };
+    // second half of a split block: same five, at most one change
+    if(b.half===2&&!forced[b.key]){
+      const base=prev.filter(id=>ids.has(id));
+      if(base.length===5){
+        const sc={};av.forEach(p=>sc[p.id]=scoreOf(p));
+        const strongBase=base.filter(id=>tierOf(id)<=2).length,t1Base=base.filter(id=>tierOf(id)===1).length;
+        let best=null,gain=30;                  // only worth a sub if it closes at least 30s of gap
+        base.forEach(o=>{if(P(o).hot&&b.abs0<(P(o).hotUntil||0))return;
+          av.forEach(p=>{if(base.includes(p.id))return;
+            const strong=strongBase-(tierOf(o)<=2)+(p.tier<=2);
+            if(strong<Math.min(floor,strongBase))return;
+            const t1n=t1Base-(tierOf(o)===1)+(p.tier===1);if(t1n<Math.min(t1Floor,t1Base))return;
+            const bhB=base.filter(isBH).length,bhn=bhB-isBH(o)+isBH(p.id);if(bhn<Math.min(bhF,bhB))return;
+            const pen=lowT&&p.tier===lowT?LOWPEN*base.filter(x=>x!==o&&tierOf(x)===lowT).length:0;
+            if(sc[p.id]-sc[o]-pen>gain){gain=sc[p.id]-sc[o]-pen;best=[o,p.id]}})});
+        const chosen=best?base.map(x=>x===best[0]?best[1]:x):base.slice();
+        chosen.forEach(id=>R[id]-=b.dur);plan[b.key]=chosen;prev=chosen;av.forEach(p=>consec[p.id]=chosen.includes(p.id)?consec[p.id]+b.dur:0);return;
+      }
+    }
+    const chosen=(forced[b.key]||[]).slice();
+    if(!lockKeys.has(b.key))chosen.forEach(id=>R[id]-=b.dur);
+    const rest=av.filter(p=>!chosen.includes(p.id)).map(p=>({p,sc:scoreOf(p)})).sort((a,b2)=>b2.sc-a.sc);
+    const lowIn=()=>lowT?chosen.filter(id=>tierOf(id)===lowT).length:0;
+    const take=x=>{chosen.push(x.p.id);R[x.p.id]-=b.dur};
+    let t1=chosen.filter(id=>tierOf(id)===1).length;
+    for(const x of rest){if(chosen.length>=5||t1>=t1Floor)break;if(x.p.tier===1){take(x);t1++}}   // top-tier floor: never leave the court short of T1s
+    let bh=chosen.filter(isBH).length;
+    for(const x of [...rest.filter(x=>x.p.tier!==lowT),...rest.filter(x=>x.p.tier===lowT)]){if(chosen.length>=5||bh>=bhF)break;if(isBH(x.p.id)&&!chosen.includes(x.p.id)){take(x);bh++}}   // someone to bring the ball up (a lowest-tier ball-handler only if no one else can)
+    let strong=chosen.filter(id=>tierOf(id)<=2).length;
+    for(const x of rest){if(chosen.length>=5||strong>=floor)break;if(x.p.tier<=2&&!chosen.includes(x.p.id)){take(x);strong++}}
+    while(chosen.length<5){   // fill the rest one at a time, so a 2nd lowest-tier player costs him his place unless he's really owed it
+      let best=null,bs=-Infinity;
+      for(const x of rest){if(chosen.includes(x.p.id))continue;const v=x.sc-(x.p.tier===lowT?LOWPEN*lowIn():0);if(v>bs){bs=v;best=x}}
+      if(!best)break;take(best);
+    }
+    // continuity: at most K players change at once (mid-quarter; quarter breaks too if set). Rebuild from the five on court,
+    // making the K most useful swaps that keep the T1 and core floors.
+    const K=+S.config.maxSubs||0,base0=prev.filter(id=>ids.has(id)),atBreak=prev.length&&b.s===0;
+    if(K&&!forced[b.key]&&base0.length===5&&(!atBreak||S.config.maxSubsBreaks)&&chosen.filter(id=>!base0.includes(id)).length>K){
+      chosen.forEach(id=>R[id]+=b.dur);   // undo the tentative pick
+      const sc={};av.forEach(p=>sc[p.id]=scoreOf(p));const OVW=2;
+      const lu=base0.slice(),cnt=f=>lu.filter(f).length;
+      for(let k=0;k<K;k++){
+        let best=null,gain=0;const s1=cnt(id=>tierOf(id)<=2),t1n=cnt(id=>tierOf(id)===1);
+        lu.forEach(o=>{if(P(o).hot&&b.abs0<(P(o).hotUntil||0))return;
+          av.forEach(p=>{if(lu.includes(p.id))return;
+            if(s1-(tierOf(o)<=2)+(p.tier<=2)<Math.min(floor,Math.max(s1,0)))return;
+            if(t1n-(tierOf(o)===1)+(p.tier===1)<Math.min(t1Floor,t1n))return;
+            {const bh0=lu.filter(isBH).length;if(bh0-isBH(o)+isBH(p.id)<Math.min(bhF,bh0))return}
+            const others=lowT?lu.filter(x=>x!==o&&tierOf(x)===lowT).length:0,pen=lowT&&p.tier===lowT?LOWPEN*others:0,relief=lowT&&tierOf(o)===lowT&&p.tier!==lowT?LOWPEN*others:0;   // splitting up two lowest-tier players is worth a swap
+            const over=id=>Math.max(0,b.dur-Math.max(0,R[id]));   // seconds past his target if he plays this block
+            const g=sc[p.id]-sc[o]-pen+relief+OVW*(over(o)-over(p.id))+(K===2&&p.tier===pt0&&pt0>=3&&R[p.id]>0?R[p.id]*frac:0)+(chosen.includes(p.id)?1:0);   // tie-break toward the unconstrained choice
+            if(g>gain){gain=g;best=[o,p.id]}})});
+        if(!best)break;lu[lu.indexOf(best[0])]=best[1];
+      }
+      chosen.length=0;lu.forEach(id=>{chosen.push(id);R[id]-=b.dur});
+    }
+    plan[b.key]=chosen;prev=chosen;av.forEach(p=>consec[p.id]=chosen.includes(p.id)?consec[p.id]+b.dur:0);
+  });
+  // lowest-tier guarantee: if the constraints (ball-handler, T1 floor, change limit) left a lowest-tier player short, swap him into a
+  // future block for the most-over player there, as long as every floor and the change limit still hold
+  if(pt0>=3){
+    const K=+S.config.maxSubs||0,brk=S.config.maxSubsBreaks!==false,ch=(x,y)=>y.filter(id=>!x.includes(id)).length;
+    const ok=(b,lu,i,soft)=>{   // soft: the lowest-tier guarantee may let the T1 floor dip to one T1 (his minutes come first)
+      if(lu.filter(id=>tierOf(id)<=2).length<Math.min(floor,(plan[b.key]||[]).filter(id=>tierOf(id)<=2).length))return false;
+      if(lu.filter(id=>tierOf(id)===1).length<Math.min(soft?Math.min(1,t1Floor):t1Floor,(plan[b.key]||[]).filter(id=>tierOf(id)===1).length))return false;
+      if(lu.filter(isBH).length<Math.min(bhF,(plan[b.key]||[]).filter(isBH).length))return false;
+      if(lowT&&lu.filter(id=>tierOf(id)===lowT).length>1)return false;
+      const pv=i>0?plan[fut[i-1].key]:(S.started?S.onCourtIds:null),nx=fut[i+1]?plan[fut[i+1].key]:null;
+      const lim=(bb,x,y)=>{if(!x||!y||x.length<5)return true;if(bb.half===2)return ch(x,y)<=1;if(!K||(bb.s===0&&!brk)||lockKeys.has(bb.key)||forced[bb.key])return true;return ch(x,y)<=K};
+      return lim(b,pv,lu)&&(!nx||lim(fut[i+1],lu,nx));
+    };
+    for(const pass of [0,1])for(let g=0;g<12;g++){   // strict first; only if that fails, allow one T1 instead of two
+      const owed=av.filter(p=>p.tier===pt0&&R[p.id]>15).sort((x,y)=>R[y.id]-R[x.id])[0];if(!owed)break;
+      let best=null;
+      fut.forEach((b,i)=>{
+        if(forced[b.key]||lockKeys.has(b.key)||b.key===firstKey&&S.started&&b.abs0<=now+1&&(S.clockRunning||b.s>0||b.abs0<now-1||S.applied[b.key]||S.fixed[b.key]))return;   // a quarter's first block is still open during the break, until those subs are made
+        const lu=plan[b.key]||[];if(lu.includes(owed.id))return;const overshoot=Math.max(0,b.dur-R[owed.id]);   // a little extra for the lowest tier beats leaving him short
+        lu.forEach(o=>{const po=P(o);if(!po||po.tier===pt0||po.hot&&b.abs0<(po.hotUntil||0))return;
+          const nl=lu.map(x=>x===o?owed.id:x);if(!ok(b,nl,i,pass>0))return;
+          const v=-R[o]-overshoot;if(!best||v>best.v)best={b,o,nl,v,give:-R[o]}})});
+      if(!best||best.give<=-best.b.dur/2)break;   // only take from someone who'd otherwise be at or over his target
+      plan[best.b.key]=best.nl;R[best.o]+=best.b.dur;R[owed.id]-=best.b.dur;
+    }
+  }
+  const keys=new Set(B.map(b=>b.key));Object.keys(plan).forEach(k=>{if(!keys.has(k))delete plan[k]});
+  // how far the whole plan lands from the targets, in minutes (sum of |projected − target|)
+  let err=0;av.forEach(p=>err+=Math.abs(R[p.id])/60);
+  return {plan,err};
+}
+// with at most 2 changing at once, fairness needs the extra one-player changes: allow at least 2 mini subs a quarter
+const miniSubsMax=()=>(+S.config.maxSubs===2)?Math.max(2,S.config.miniSubs|0):(S.config.miniSubs|0);
+function chooseHalves(T){
+  const max=miniSubsMax(),now=elapsedAbs(),old=S.halves||{};
+  const BB=baseBlocks(),halves={};
+  BB.forEach(b=>{if(old[b.key]&&(b.abs0<=now||S.fixed[b.key]||S.applied[b.key]))halves[b.key]=1});   // splits that have started (or been swapped into) stay
+  if(!max||S.config.shiftLength<3)return halves;
+  let curErr=solvePlan(halves,T).err;
+  for(let q=1;q<=4;q++){
+    const inQ=BB.filter(b=>b.p===q);
+    let used=inQ.filter(b=>halves[b.key]).length;
+    const cands=inQ.filter(b=>!inLockBlock(b)&&b.dur>=180&&((b.abs0>now&&!S.fixed[b.key]&&!S.applied[b.key])||(S.early&&S.early[b.key]&&b.abs0+b.dur/2>now+30)));   // a block whose lineup came from an early swap can still get its mini sub
+    while(used<max){
+      let best=null,bestErr=curErr;
+      cands.forEach(b=>{if(halves[b.key])return;
+        const e=solvePlan({...halves,[b.key]:1},T).err,need=old[b.key]?0.25:1.0;   // keep an existing split unless it stops helping
+        if(e<curErr-need&&e<bestErr){best=b;bestErr=e}});
+      if(!best)break;
+      halves[best.key]=1;curErr=bestErr;used++;
+    }
+  }
+  return halves;
+}
+function replan(){
+  const now=elapsedAbs(),av=availList(),ids=new Set(av.map(p=>p.id));
+  S.onCourtIds=S.onCourtIds.filter(id=>ids.has(id));
+  // hot lasts through the next block, then clears itself (his bonus minutes stay)
+  if(!S.finished)av.forEach(p=>{if(p.hot&&p.hotUntil!=null&&now>=p.hotUntil){p.hot=false;p.hotUntil=null;log(clockLabel()+' — '+tag(p.id)+' hot stint done, back on normal rotation'+(S.adj['hot:'+p.id]?' (keeps his bonus minutes)':''),'rp')}});
+  const T=targets();
+  S.halves=chooseHalves(T);
+  S.plan=solvePlan(S.halves,T).plan;
+  const fut=blocksAll().filter(b=>b.abs0>=now);
+  if(!S.started&&fut[0])S.onCourtIds=(S.plan[fut[0].key]||[]).slice();
+}
+// short on court (injury, foul-out): the first job is to get back to five — closers first in the lock, then highest tier, then most owed
+function fillCall(){
+  if(S.finished||!S.started||S.onCourtIds.length>=5)return null;
+  const T=targets(),owed=p=>(T[p.id]||0)*60-played(p.id),lock=inLockLive();
+  const bench=availList().filter(p=>!S.onCourtIds.includes(p.id)).sort((a,b)=>(lock?(S.closersIds.includes(b.id)-S.closersIds.includes(a.id)):0)||a.tier-b.tier||owed(b)-owed(a));
+  if(!bench.length)return null;
+  const b=nowBlock()||blocksAll().find(x=>x.abs0>=elapsedAbs());if(!b)return null;
+  const ins=bench.slice(0,5-S.onCourtIds.length).map(p=>p.id);
+  return {b,pl:S.onCourtIds.concat(ins),ins,outs:[],overdue:true,late:0,status:'now',fill:true};
+}
+function nextPlanned(){
+  if(S.finished||!S.started)return null;
+  {const f=fillCall();if(f)return f}
+  const now=elapsedAbs(),B=blocksAll(),ids=new Set(availList().map(p=>p.id));
+  const diff=b=>{const pl=(S.plan[b.key]||[]).filter(id=>ids.has(id));return {b,pl,ins:pl.filter(id=>!S.onCourtIds.includes(id)),outs:S.onCourtIds.filter(id=>!pl.includes(id))}};
+  const cur=B.find(b=>b.abs0<now&&now<b.abs1);
+  const W=+S.config.onTimeSecs||0,RD=+S.config.readySecs||0;
+  if(cur&&!S.applied[cur.key]&&cur.abs0>0){const d=diff(cur);const hot=d.outs.filter(id=>P(id).hot);if(hot.length){d.outs=d.outs.filter(id=>!P(id).hot);d.ins=d.ins.slice(0,d.outs.length+(5-S.onCourtIds.length));d.pl=S.onCourtIds.filter(id=>!d.outs.includes(id)).concat(d.ins)}if(d.ins.length)return {...d,overdue:true,late:now-cur.abs0,status:now-cur.abs0<=W?'now':'overdue'}}
+  for(const b of B){if(b.abs0<now||S.applied[b.key])continue;const d=diff(b);if(d.ins.length){const inSec=b.abs0-now;return {...d,overdue:false,inSec,status:inSec<=0.5?'now':inSec<=RD?'ready':'planned'}}}
+  return null;
+}
+const who=id=>{const p=P(id);return p?'#'+p.num+' '+esc(p.name):'?'};
+function swapRows(n){
+  const rows=[],k=Math.max(n.ins.length,n.outs.length);
+  for(let i=0;i<k;i++)rows.push(`<div class="swap">${n.outs[i]?`<span class="outt">OUT ${who(n.outs[i])}</span>`:'<span></span>'}<span class="arr">→</span>${n.ins[i]?`<span class="inn">IN ${who(n.ins[i])}</span>`:'<span></span>'}</div>`);
+  return rows.join('');
+}
+
+/* ---------- clock ---------- */
+/* ---------- keep the screen awake for the whole game (paused clock and breaks too) ----------
+   Wake Lock API first; where the page isn't allowed it (inside the claude.ai frame, some iPhones) fall back to a tiny
+   silent looping video, which phones treat as "something is playing" (technique and media from NoSleep.js, MIT licence). */
+let wakeLock=null,awakeVid=null;ui.awake='none';
+const NOSLEEP_WEBM="data:video/webm;base64,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",NOSLEEP_MP4="data:video/mp4;base64,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";
+const wantAwake=()=>S.started&&!S.finished;
+function awakeVideo(){
+  if(awakeVid||typeof document.createElement!=='function')return awakeVid;
+  const v=document.createElement('video');v.setAttribute('playsinline','');v.setAttribute('muted','');v.muted=true;v.setAttribute('title','Keep screen on');
+  v.style.cssText='position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:0;bottom:0';
+  [['webm',NOSLEEP_WEBM],['mp4',NOSLEEP_MP4]].forEach(([t,src])=>{const s=document.createElement('source');s.src=src;s.type='video/'+t;v.appendChild(s)});
+  v.addEventListener('loadedmetadata',()=>{if(v.duration<=1)v.setAttribute('loop','');else v.addEventListener('timeupdate',()=>{if(v.currentTime>0.5)v.currentTime=Math.random()})});
+  try{document.body.appendChild(v)}catch(e){}
+  return awakeVid=v;
+}
+function setAwake(m){if(ui.awake!==m){ui.awake=m;if(ui.tab==='live'&&!ui.sheet)render()}}
+async function requestWake(){
+  if(!wantAwake()){releaseWake();return}
+  if(ui.awake!=='none'&&(ui.awake!=='lock'||wakeLock))return;
+  try{if('wakeLock' in navigator){wakeLock=await navigator.wakeLock.request('screen');wakeLock.addEventListener('release',()=>{wakeLock=null;if(ui.awake==='lock')setAwake('none')});setAwake('lock');return}}catch(e){wakeLock=null}
+  try{const v=awakeVideo();if(v&&v.play){await v.play();setAwake('video');return}}catch(e){}
+  setAwake('none');
+}
+function releaseWake(){try{wakeLock&&wakeLock.release()}catch(e){}wakeLock=null;try{awakeVid&&awakeVid.pause&&awakeVid.pause()}catch(e){}ui.awake='none'}
+function tick(){
+  const t=Date.now();let el=(t-S.lastTickTime)/1000;S.lastTickTime=t;
+  if(!(el>0))el=0;   // phone clock jumped backwards (manual change, network time fix): never run the game clock backwards
+  if(!S.clockRunning)return false;
+  const c=Math.min(el,S.clockSeconds);S.clockSeconds-=c;
+  S.onCourtIds.forEach(id=>{const s=st(id);s.playedSeconds+=c;while(s.periodSplit.length<S.period)s.periodSplit.push(0);s.periodSplit[S.period-1]+=c;s.consecutiveSeconds+=c});
+  if(c>0&&S.onCourtIds.length===5){const k=lineKey(S.onCourtIds);S.lineSecs[k]=(S.lineSecs[k]||0)+c}
+  if(S.clockSeconds<=0.0001){
+    S.clockSeconds=0;S.clockRunning=false;S.pausedAt=null;
+    log(qLabel(S.period)+' complete');buzz('qend');dbg('periodEnd',[]);openBreak();save();render();return true;
+  }
+  if(t-lastSave>5000)save();
+  return true;
+}
+// a score or foul logged while the clock still shows the full quarter: the clock was probably never started
+function clockNudge(){if(!S.finished&&!S.clockRunning&&S.clockSeconds>=len()-0.5&&ui.nudge!==S.period){ui.nudge=S.period;buzz('nudge')}}
+/* ---------- attention: vibration + screen flash, checked every quarter-second whatever screen is open ---------- */
+const VIB={strong:{run:[300,100,300,100,300],ready:[250],now:[400,150,400,150,400],overdue:[600,200,600],foul4:[120,80,120,80,120,80,120],qend:[900],nudge:[200,100,200]},
+  light:{run:[90,60,90,60,90],ready:[60],now:[90,60,90],overdue:[90,60,90],foul4:[60,40,60,40,60],qend:[200],nudge:[60,40,60]}};
+function buzz(kind){const m=S.config.haptics||'strong';if(m==='off')return;const p=(VIB[m]||VIB.strong)[kind];if(!p)return;try{navigator.vibrate&&navigator.vibrate(p)}catch(_){}}
+function alertState(){   // what needs the coach's attention right now, most urgent first
+  if(!S.started||S.finished)return null;
+  const fd=foulDanger();if(fd)return {kind:'foul4',key:'fd:'+fd.id};
+  {const r=runAgainst();if(r&&toLeft('us')>0)return {kind:'run',key:'run:'+S.score.ev[S.score.ev.length-1].n}}
+  const LC=liveCalls();if(LC.later)return null;
+  const n=nextPlanned();if(!n||!n.ins.length)return null;
+  if(n.status==='ready'||n.status==='now'||n.status==='overdue')return {kind:n.status,key:n.b.key+':'+n.status,n};
+  return null;
+}
+let alertLast={key:null,at:0};
+function alertTick(){
+  const a=alertState(),now=Date.now(),fl=document.getElementById('flash');
+  if(fl){const cls='flash'+(a&&S.config.flash!==false?' '+a.kind:'');if(fl.className!==cls)fl.className=cls}
+  if(!a){alertLast={key:null,at:0};return null}
+  if(a.key!==alertLast.key){alertLast={key:a.key,at:now};buzz(a.kind);flashHit(a.kind)}
+  else if(a.kind==='overdue'&&S.clockRunning&&now-alertLast.at>=30000){alertLast.at=now;buzz('overdue');flashHit('overdue')}   // keep nagging while it's overdue
+  return a;
+}
+function flashHit(kind){if(S.config.flash===false)return;const fl=document.getElementById('flash');if(!fl||!fl.classList||!fl.style)return;
+  fl.style.setProperty('--fc',kind==='ready'?'var(--warn)':kind==='now'?'var(--go)':'var(--bad)');fl.classList.add('hit');setTimeout(()=>fl.classList.remove('hit'),450)}
+function startClock(){ui.nudge=null;
+  if(S.finished||S.clockSeconds<=0)return;
+  if(S.onCourtIds.length<5&&!S.started){toast('Need 5 on court to tip off');return}
+  S.lastTickTime=Date.now();S.clockRunning=true;S.pausedAt=null;
+  if(!S.started){const b0=blocksAll()[0];if(b0){S.fixed[b0.key]=S.onCourtIds.slice();S.applied[b0.key]=1}   // the starting five is what's on court; never re-pick it
+    S.started=true;log('Tip-off — starters: '+S.onCourtIds.map(id=>'#'+P(id).num).join(' '))}
+  requestWake();save();render();
+}
+function pauseClock(){tick();S.clockRunning=false;S.pausedAt=Date.now();save();render()}
+function toggleClock(){S.clockRunning?pauseClock():startClock()}
+
+/* ---------- subs, fouls, undo ---------- */
+function doSub(outId,inId){
+  const p=P(inId);if(!p||!p.active||st(inId).fouledOut||S.onCourtIds.includes(inId))return;
+  if(!S.started){ // pre-game: edits the starting five
+    if(outId){P(outId).starter=false}p.starter=true;
+    S.onCourtIds=S.onCourtIds.filter(x=>x!==outId).concat(inId);ui.pendingOut=null;replan();save();render();return;
+  }
+  if(S.clockRunning)tick();
+  const prevOn=S.onCourtIds.slice(),n=nextPlanned(),cur=curBlock();
+  S.undo.push({type:'single',outId,inId,prevOn,prevConsec:st(inId).consecutiveSeconds,at:clockLabel(),...snap()});
+  S.onCourtIds=outId?S.onCourtIds.map(x=>x===outId?inId:x):S.onCourtIds.concat(inId);
+  const onPlan=n&&n.ins.includes(inId)&&(!outId||n.outs.includes(outId))&&(n.overdue||n.inSec<=earlySecs());
+  if(onPlan&&!n.overdue){S.fixed[n.b.key]=n.pl.slice();if(cur)S.applied[cur.key]=true;if(n.pl.every(id=>S.onCourtIds.includes(id)))S.applied[n.b.key]=true}
+  else if(onPlan&&n.overdue){if(n.pl.every(id=>S.onCourtIds.includes(id)))S.applied[n.b.key]=true}
+  else if(cur)S.applied[cur.key]=true;
+  st(inId).consecutiveSeconds=0;
+  log(clockLabel()+' — '+tag(inId)+' IN'+(outId?' for '+tag(outId):''));
+  ui.pendingOut=null;replan();save();render();
+  toast(shortName(P(inId))+' in'+(outId?' for '+shortName(P(outId)):''),'undo');
+}
+const earlySecs=()=>Math.max(+S.config.readySecs||0,(+S.config.shiftLength||4)*30);   // a planned change made more than this early (half a block) is treated as a new decision, and the rest is re-planned
+const nowBlock=()=>{const now=elapsedAbs();return blocksAll().find(b=>b.abs0<=now+0.5&&now<b.abs1-0.5)};
+function markNowBlock(){const c=nowBlock();if(!c)return;S.applied[c.key]=true;if(c.abs0>=elapsedAbs()-0.5&&!S.pinned[c.key]){S.fixed[c.key]=S.onCourtIds.slice();(S.early=S.early||{})[c.key]=1}}   // what's on court now is this block's lineup
+function quickSwap(confirmed){
+  const n=nextPlanned();if(!n||!n.ins.length)return;
+  if(n.fill){   // back to five: just add the replacement(s); the planned change for this block still stands
+    if(S.clockRunning)tick();
+    const prevOn=S.onCourtIds.slice(),prevConsec={};n.ins.forEach(id=>prevConsec[id]=st(id).consecutiveSeconds);
+    S.undo.push({type:'mass',prevOn,prevConsec,ins:n.ins,outs:[],...snap()});
+    S.onCourtIds=S.onCourtIds.concat(n.ins).slice(0,5);n.ins.forEach(id=>st(id).consecutiveSeconds=0);
+    log(clockLabel()+' — IN '+n.ins.map(id=>'#'+P(id).num).join(' ')+' (back to five)');
+    ui.pendingOut=null;replan();save();render();toast('IN '+n.ins.map(id=>shortName(P(id))).join(', ')+' · back to five','undo');return;
+  }
+  if(!n.overdue&&n.b.p>S.period&&S.clockSeconds>0){toast('That change is for the start of '+qLabel(n.b.p)+' — make it at the break');return}
+  const early=!n.overdue&&n.inSec>earlySecs();
+  if(early&&!confirmed&&ui.sheet!=='ourto'){ui.sheet='early';renderSheet();return}   // a long way ahead of time: check it wasn't a stray tap
+  if(ui.sheet==='early')ui.sheet=null;
+  if(S.clockRunning)tick();
+  const prevOn=S.onCourtIds.slice(),prevConsec={};n.ins.forEach(id=>prevConsec[id]=st(id).consecutiveSeconds);
+  S.undo.push({type:'mass',prevOn,prevConsec,ins:n.ins,outs:n.outs,...snap()});
+  S.onCourtIds=S.onCourtIds.filter(id=>!n.outs.includes(id)).concat(n.ins).slice(0,5);
+  n.ins.forEach(id=>st(id).consecutiveSeconds=0);
+  if(early){markNowBlock();if(!S.pinned[n.b.key])delete S.fixed[n.b.key]}   // early: this five plays from now, and the planned change is picked again from the new minutes
+  else{S.applied[n.b.key]=true;
+  if(!n.overdue){S.fixed[n.b.key]=S.onCourtIds.slice();const c=curBlock();if(c)S.applied[c.key]=true}}
+  const W=+S.config.onTimeSecs||0,when=n.overdue&&n.late>W?' (late by '+mmssShort(n.late)+')':!n.overdue&&n.inSec>W?' (early by '+mmssShort(n.inSec)+(early?', rest of game re-planned':'')+')':'';
+  log(clockLabel()+' — QUICK SWAP'+when+': IN '+n.ins.map(id=>'#'+P(id).num).join(' ')+' • OUT '+n.outs.map(id=>'#'+P(id).num).join(' '));
+  ui.pendingOut=null;replan();save();render();
+  toast('IN '+n.ins.map(id=>shortName(P(id))).join(', ')+' · OUT '+n.outs.map(id=>shortName(P(id))).join(', '),'undo',n.ins.length>1?'Undo all '+n.ins.length:'Undo');
+}
+function pinBlock(key,ids){S.fixed[key]=ids.slice();S.pinned[key]=1;const b=blocksAll().find(x=>x.key===key);
+  log((S.started?clockLabel()+' — ':'')+'PLAN: locked lineup for '+(b?blockLabel(b):key)+': '+ids.map(id=>'#'+P(id).num).join(' '),'rp');replan();save();render()}
+function unpinBlock(key){delete S.fixed[key];delete S.pinned[key];log((S.started?clockLabel()+' — ':'')+'PLAN: unlocked '+key,'rp');replan();save();render()}
+function moveBoundary(key,delta){
+  const before=blocksAll().find(x=>x.key===key);if(!before||!before.movable||before.abs0<=elapsedAbs())return;
+  S.moves[key]=(+S.moves[key]||0)+delta;if(!S.moves[key])delete S.moves[key];
+  const after=blocksAll().find(x=>x.key===key);
+  log((S.started?clockLabel()+' — ':'')+'PLAN: change at '+blockLabel(before).split('–')[0]+' moved to '+mmssShort(S.periods[after.p-1]-after.s),'rp');
+  replan();save();render();
+}
+/* score, timeouts, runs */
+const tn=()=>(S.config.teamName||'').trim()||'Us',tfull=()=>(S.config.teamFull||'').trim()||tn();
+const oppName=()=>(S.match.opp||'Opp').trim()||'Opp';
+function addScore(side,pts){
+  if(S.clockRunning)tick();
+  S.score[side]+=pts;S.score.ev.push({side,pts,p:S.period,c:Math.round(S.clockSeconds),t:Math.round(elapsedAbs()),n:S.seqN=(S.seqN||0)+1,on:S.onCourtIds.slice()});
+  S.undo.push({type:'score',side,pts});
+  if(side==='us'&&S.started&&S.onCourtIds.length){ui.askScorer=S.seqN;ui.askAt=Date.now()}else if(side==='us')ui.askScorer=null;
+  log(clockLabel()+' — '+(side==='us'?tn():oppName())+' +'+pts+' ('+S.score.us+'–'+S.score.them+')');clockNudge();save();render();
+}
+// −1: take a point off that side's most recent score (a +2 becomes +1; a +1 disappears). Undoable.
+// who scored: one tap on a name straight after +1/+2/+3 (skippable; disappears after 8 seconds)
+function setScorer(id){const e=S.score.ev.find(x=>x.n===ui.askScorer&&x.side==='us');ui.askScorer=null;if(!e||!P(id))return;e.by=id;log(clockLabel()+' — '+tag(id)+' scored '+e.pts);save();render()}
+const askLive=()=>ui.askScorer&&Date.now()-(ui.askAt||0)<8000&&S.score.ev.some(x=>x.n===ui.askScorer);
+function scorerStrip(){
+  if(!askLive())return '';const e=S.score.ev.find(x=>x.n===ui.askScorer);
+  const ids=(e.on&&e.on.length?e.on:S.onCourtIds).filter(id=>P(id));
+  return `<div class="whos"><span class="muted small">Who scored +${e.pts}?</span><div class="whog">${ids.map(id=>`<button class="btn" data-act="scorer:${id}"><b>#${P(id).num}</b> ${esc(String(P(id).name).split(/\s+/).slice(-1)[0])}</button>`).join('')}<button class="btn ghost" data-act="scorer:-">Skip</button></div></div>`;
+}
+function pointsBy(){const o={};S.score.ev.forEach(e=>{if(e.side==='us'&&e.by)o[e.by]=(o[e.by]||0)+e.pts});return o}
+function scoreMinus(side){
+  if(S.clockRunning)tick();
+  const ev=S.score.ev;let i=ev.length-1;while(i>=0&&ev[i].side!==side)i--;
+  if(i<0||S.score[side]<=0){toast('No '+(side==='us'?tn():oppName())+' points to take off');return}
+  const prev={...ev[i]};
+  if(ev[i].pts>1)ev[i].pts--;else ev.splice(i,1);
+  S.score[side]--;S.undo.push({type:'scorefix',side,i,prev});
+  log(clockLabel()+' — SCORE FIX: '+(side==='us'?tn():oppName())+' −1 ('+S.score.us+'–'+S.score.them+')');save();render();
+  toast((side==='us'?tn():oppName())+' −1 · '+S.score.us+'–'+S.score.them,'undo');
+}
+const toWindow=p=>p<=2?'h1':p<=4?'h2':'ot'+p;
+const toAllowed=p=>p<=2?2:p<=4?3:1;
+function toLeft(side){const w=toWindow(S.period);return toAllowed(S.period)-S.tos.filter(t=>t.side===side&&toWindow(t.p)===w).length}
+function toLeftLast2(side){if(S.period!==4||S.clockSeconds>120)return null;return 2-S.tos.filter(t=>t.side===side&&t.p===4&&t.c<=120).length}
+function callTimeout(side){
+  if(toLeft(side)<=0){toast('No timeouts left this '+(S.period<=4?'half':'period'));return}
+  if(toLeftLast2(side)===0){toast('Max 2 timeouts in the last 2:00 of Q4');return}
+  if(S.clockRunning){tick();S.clockRunning=false;S.pausedAt=Date.now()}
+  S.tos.push({side,p:S.period,c:Math.round(S.clockSeconds),t:Math.round(elapsedAbs()),n:S.seqN=(S.seqN||0)+1});S.undo.push({type:'timeout',side});
+  log(clockLabel()+' — TIMEOUT '+(side==='us'?tn():oppName())+' ('+toLeft(side)+' left this '+(S.period<=4?'half':'period')+')');
+  ui.sheet=side==='us'?'ourto':null;save();render();
+}
+// Session 7 rule: they score on 3 straight possessions (≈ 6–0 run) → timeout at the next dead ball
+function runAgainst(){
+  const ev=S.score.ev,lastTO=Math.max(0,...S.tos.filter(t=>t.side==='us').map(t=>t.n||0));
+  let pts=0,n=0;
+  for(let i=ev.length-1;i>=0&&ev[i].side==='them'&&(ev[i].n||0)>lastTO&&ev[i].p===S.period;i--){pts+=ev[i].pts;n++}   // our timeout, or the end of the quarter, ends a run
+  return n>=3?{pts,n}:null;
+}
+/* plus/minus: points for minus points against while he was on court (only scores logged in this app version or later) */
+const lineKey=ids=>ids.slice().sort().join(',');
+function plusMinus(){
+  const pm={},lines={};let counted=0;
+  S.score.ev.forEach(e=>{if(!Array.isArray(e.on))return;counted++;const d=e.side==='us'?e.pts:-e.pts;
+    e.on.forEach(id=>pm[id]=(pm[id]||0)+d);if(e.on.length===5){const k=lineKey(e.on),l=lines[k]||(lines[k]={for:0,against:0});if(d>0)l.for+=d;else l.against-=d}});
+  const units=Object.entries(S.lineSecs||{}).filter(([k,sec])=>sec>=120).map(([k,sec])=>({ids:k.split(','),sec,for:(lines[k]||{}).for||0,against:(lines[k]||{}).against||0}))
+    .map(u=>({...u,pm:u.for-u.against})).sort((a,b)=>b.sec-a.sec);
+  return {pm,units,counted};
+}
+function scoreByQ(){const q=S.periods.map(()=>({us:0,them:0}));S.score.ev.forEach(e=>{if(q[e.p-1])q[e.p-1][e.side]+=e.pts});return q}
+function scoreLine(){if(!S.score.ev.length&&!S.score.us&&!S.score.them)return '';return tn()+' '+S.score.us+' – '+S.score.them+' '+oppName()}
+
+/* season (kept on this phone, separate from the match) */
+const SEASON_KEY='pumas_season_v1';
+function seasonLoad(){try{const r=localStorage.getItem(SEASON_KEY),o=r?JSON.parse(r):null;return o&&o.v===1&&Array.isArray(o.games)?o:{v:1,games:[]}}catch(e){return {v:1,games:[]}}}
+function seasonSave(se){try{localStorage.setItem(SEASON_KEY,JSON.stringify(se))}catch(e){}}
+function gameRecord(){
+  const T=targets(),PM=plusMinus().pm,PB=pointsBy();
+  return {id:S.match.id,date:S.match.date,opp:S.match.opp||'',practice:!!S.match.practice,us:S.score.us,them:S.score.them,scored:S.score.ev.length>0,blocks:S.config.shiftLength,app:APP_VERSION,
+    players:S.roster.filter(p=>p.active||played(p.id)>0).map(p=>({num:p.num,name:p.name,tier:p.tier,mins:Math.round(played(p.id)/6)/10,tgt:T[p.id]||0,fouls:st(p.id).fouls,pm:PM[p.id]||0,pts:PB[p.id]||0}))};
+}
+function archiveGame(){const se=seasonLoad(),rec=gameRecord(),i=se.games.findIndex(g=>g.id===rec.id);if(i>=0)se.games[i]=rec;else se.games.push(rec);seasonSave(se);S.archived=true;save()}
+function removeSeasonGame(id){const se=seasonLoad();se.games=se.games.filter(g=>g.id!==id);seasonSave(se);if(id===S.match.id)S.archived=false;save();render()}
+function clearSeason(){seasonSave({v:1,games:[]});S.archived=false;save();render()}
+// paste a game exported earlier (this app's CSV or WhatsApp summary)
+function importGame(text,date,opp,us,them){
+  const players=[],lines=String(text||'').split(/\r?\n/);
+  const csvHead=lines.findIndex(l=>/^Jersey,Name,Tier,Target_Mins,Actual_Mins/.test(l));
+  if(csvHead>=0){lines.slice(csvHead+1).forEach(l=>{const m=l.match(/^(\d+),"((?:[^"]|"")*)",(\d),([\d.]+),([\d.]+),[-\d.]+,(.*)$/);if(!m)return;
+    const rest=m[6].split(',');players.push({num:+m[1],name:m[2].replace(/""/g,'"'),tier:+m[3],tgt:+m[4],mins:+m[5],fouls:+rest[rest.length-2]||0})})}
+  else lines.forEach(l=>{const m=l.match(/#(\d+)\s+(.+?)\s+\(T(\d)\):\s*([\d.]+)m\s*\/\s*tgt\s*([\d.]+)m.*?F:(\d)/);if(m)players.push({num:+m[1],name:m[2],tier:+m[3],mins:+m[4],tgt:+m[5],fouls:+m[6]})});
+  if(!players.length)return 0;
+  if(!date){const dm=String(text).match(/📅\s*([\d/]+)/);date=dm?dm[1]:today()}
+  if(!opp){const om=String(text).match(/\|\s*vs\s+([^|\n]+)/);opp=om?om[1].trim():''}
+  const se=seasonLoad();se.games.push({id:'imp'+Date.now().toString(36)+se.games.length,date,opp,us:+us||0,them:+them||0,scored:!!(+us||+them),imported:true,players});seasonSave(se);
+  return players.length;
+}
+// backup: the season, the squad and the settings as one text block to paste somewhere safe (WhatsApp, the project)
+function backupText(){
+  const o={v:1,app:APP_VERSION,made:new Date().toISOString(),season:seasonLoad(),roster:S.roster.map(p=>({id:p.id,num:p.num,name:p.name,tier:p.tier,active:p.active,starter:!!p.starter,bh:!!p.bh})),config:S.config,closersIds:S.closersIds};
+  return 'PUMAS-BACKUP-1:'+btoa(unescape(encodeURIComponent(JSON.stringify(o))));
+}
+function readBackup(text){
+  const m=String(text||'').replace(/\s+/g,'').match(/PUMAS-BACKUP-1:([A-Za-z0-9+/=]+)/);if(!m)return null;
+  try{const o=JSON.parse(decodeURIComponent(escape(atob(m[1]))));return o&&o.v===1&&o.season&&Array.isArray(o.season.games)?o:null}catch(e){return null}
+}
+// merge keeps every game already on this phone and adds the ones it doesn't have; squad=true also restores squad, tiers and settings
+function restoreBackup(text,squad){
+  const o=readBackup(text);if(!o)return null;
+  const se=seasonLoad(),have=new Set(se.games.map(g=>g.id));let added=0;
+  o.season.games.forEach(g=>{if(g&&g.id&&Array.isArray(g.players)&&!have.has(g.id)){se.games.push(g);added++}});
+  seasonSave(se);
+  if(squad&&!S.started&&Array.isArray(o.roster)&&o.roster.length){
+    S.roster=o.roster.map(p=>({...p,hot:false,cold:false}));S.roster.forEach(p=>st(p.id));
+    S.config={...DEF_CFG,...o.config,tierMins:{...DEF_CFG.tierMins,...(o.config||{}).tierMins}};
+    S.closersIds=(o.closersIds||[]).filter(id=>S.roster.some(p=>p.id===id));S.plan={};S.fixed={};S.applied={};S.halves={};S.pinned={};S.moves={};replan();
+  }
+  log('BACKUP restored: '+added+' game'+(added===1?'':'s')+' added'+(squad?(S.started?' (squad not changed: game in progress)':' · squad and settings restored'):''),'rp');save();
+  return {added,squad:squad&&!S.started};
+}
+function seasonTable(){
+  const se=seasonLoad(),g=se.games;if(!g.length)return null;
+  const byNum={};g.forEach((gm,gi)=>gm.players.forEach(p=>{const r=byNum[p.num]||(byNum[p.num]={num:p.num,name:p.name,tier:p.tier,cells:Array(g.length).fill(null),tot:0,tgt:0,gp:0,dt:0,gt:0,pm:0,pmg:0,pts:0});r.name=p.name;if(typeof p.pm==='number'){r.pm+=p.pm;r.pmg++}r.pts+=+p.pts||0;r.tier=p.tier;r.cells[gi]=p.mins;r.tot+=p.mins;r.tgt+=p.tgt||0;if(p.mins>0)r.gp++;
+    if(p.tgt>0){r.dt+=p.mins-p.tgt;r.gt++}}));   // fairness: minutes against his target, only in games that had one
+  const rows=Object.values(byNum).sort((a,b)=>a.tier-b.tier||b.tot-a.tot);
+  rows.forEach(r=>{const avg=r.gt?r.dt/r.gt:0;r.fair=!r.gt?'':avg< -2.5?'way':avg< -1?'short':avg>1?'over':'ok'});
+  const w=g.filter(x=>x.scored&&x.us>x.them).length,l=g.filter(x=>x.scored&&x.us<x.them).length;
+  return {games:g,rows,w,l};
+}
+function seasonCsv(){
+  const t=seasonTable();if(!t)return '';
+  let out='Jersey,Name,Tier,'+t.games.map(x=>'"'+x.date+(x.opp?' vs '+x.opp:'')+'"').join(',')+',Total_Mins,Games,Avg_Mins,Target_Total,Vs_Target\n';
+  t.rows.forEach(r=>{out+=[r.num,'"'+r.name.replace(/"/g,'""')+'"',r.tier,...r.cells.map(c=>c==null?'':c),m1(r.tot),r.gp,r.gp?m1(r.tot/r.gp):'',m1(r.tgt),r.gt?m1(r.dt):''].join(',')+'\n'});
+  return out;
+}
+
+/* rotation card for an assistant: the plan as plain text */
+const shortName=p=>'#'+p.num+' '+String(p.name).split(/\s+/).slice(-1)[0];
+function rotationCard(){
+  const B=blocksAll(),now=elapsedAbs(),T=targets(),fut=B.filter(b=>b.abs1>now);
+  const nm=ids=>ids.map(id=>shortName(P(id))).join(', ');
+  let t='🏀 '+tfull().toUpperCase()+' — ROTATION PLAN'+(S.match.opp?' vs '+S.match.opp:'')+' · '+S.match.date+'\n';
+  t+=S.config.shiftLength+'-min blocks'+(S.config.miniSubs?' + mini subs':'')+' · sub on the dead ball nearest each time · keep '+S.config.strongFloor+'+ core on court\n';
+  if(S.started)t+='(from '+clockLabel()+', current five: '+nm(S.onCourtIds)+')\n';
+  t+='------------------------------------\n';
+  let prev=S.started?S.onCourtIds.slice():null;
+  fut.forEach(b=>{
+    const pl=S.plan[b.key]||[],at=blockLabel(b).split('–')[0],tagL=inLockBlock(b)?' 🔒 CLOSERS':b.half===2?' (mini sub)':S.pinned[b.key]?' 📌':'';
+    if(!prev||b.s===0&&b.half!==2){
+      const outs=prev?prev.filter(id=>!pl.includes(id)):[],ins=prev?pl.filter(id=>!prev.includes(id)):[];
+      t+='\n'+qLabel(b.p)+' START'+tagL+': '+nm(pl)+'\n'+(ins.length?'        OFF '+nm(outs)+'  →  ON '+nm(ins)+'\n':'');}
+    else{const outs=prev.filter(id=>!pl.includes(id)),ins=pl.filter(id=>!prev.includes(id));
+      if(ins.length)t+=at.padEnd(8)+tagL.trim()+(tagL?' ':'')+'OFF '+nm(outs)+'  →  ON '+nm(ins)+'\n';}
+    prev=pl;
+  });
+  t+='\n------------------------------------\nPlanned minutes:\n';
+  const planned=id=>{let x=played(id);B.forEach(b=>{if(b.abs1<=now)return;if((S.plan[b.key]||[]).includes(id))x+=b.abs0>=now?b.dur:b.abs1-now});return x/60};
+  availList().slice().sort((a,b)=>a.tier-b.tier||a.num-b.num).forEach(p=>{t+='• '+shortName(p)+' (T'+p.tier+') '+mt(planned(p.id))+' min\n'});
+  t+='\nTimeouts: 2 first half, 3 second half (max 2 in last 2:00), 1 per OT.';
+  return t;
+}
+
+function skipPlanned(){const n=nextPlanned();if(!n)return;S.applied[n.b.key]=true;log(clockLabel()+' — Skipped planned change for '+blockLabel(n.b).split('–')[0]);replan();save();render()}
+// fix a player's minutes by hand: never below 0, never more than the game so far; this quarter first, then earlier ones
+function adjMins(id,d){
+  if(!S.started||!d)return;if(S.clockRunning)tick();
+  const s=st(id);while(s.periodSplit.length<S.period)s.periodSplit.push(0);
+  const before=s.playedSeconds,split=s.periodSplit.slice();
+  let x=d>0?Math.min(d,Math.max(0,elapsedAbs()-s.playedSeconds)):-Math.min(-d,s.playedSeconds);
+  if(!x){toast(d>0?tag(id)+' already has every minute played so far':tag(id)+' has no minutes to take off');return}
+  if(x>0)s.periodSplit[S.period-1]+=x;else{let r=-x;for(let i=S.period-1;i>=0&&r>0;i--){const t=Math.min(r,s.periodSplit[i]||0);s.periodSplit[i]-=t;r-=t}}
+  s.playedSeconds+=x;if(S.onCourtIds.includes(id))s.consecutiveSeconds=Math.max(0,s.consecutiveSeconds+x);
+  S.undo.push({type:'mins',id,before,split,x});
+  log(clockLabel()+' — MINUTES FIX: '+tag(id)+' '+(x>0?'+':'−')+mmssShort(Math.abs(x))+' (now '+mmss(s.playedSeconds)+')','rp');
+  replan();save();render();toast(tag(id)+' '+(x>0?'+':'−')+mmssShort(Math.abs(x))+' · now '+mmss(s.playedSeconds),'undo');
+}
+function removePlayer(id){
+  const p=P(id);if(!p)return;
+  if(S.started&&played(id)>0){toast(tag(id)+' has played in this match — mark him Out instead');return}
+  S.roster=S.roster.filter(x=>x.id!==id);S.closersIds=S.closersIds.filter(x=>x!==id);S.onCourtIds=S.onCourtIds.filter(x=>x!==id);
+  for(const o of [S.plan,S.fixed])Object.keys(o).forEach(k=>{if(Array.isArray(o[k]))o[k]=o[k].filter(x=>x!==id)});
+  Object.values(S.adj).forEach(ev=>{delete ev[id]});delete S.adj['hot:'+id];delete S.adj['cold:'+id];delete S.stats[id];
+  S.undo=S.undo.filter(u=>!JSON.stringify(u).includes('"'+id+'"'));   // nothing left to undo that would bring him back
+  log((S.started?clockLabel()+' — ':'')+'SQUAD: #'+p.num+' '+p.name+' removed','rp');
+  replan();save();render();toast('#'+p.num+' '+p.name+' removed from the squad');
+}
+function undoFoul(id){const u=S.undo[S.undo.length-1];if(u&&u.type==='foul'&&u.id===id&&u.delta>0)undo();else addFoul(id,-1);toast('Foul removed — '+tag(id)+' now F:'+st(id).fouls)}
+const tfKey=()=>Math.min(S.period,4);   // FIBA: overtime fouls count with Q4
+const tfUs=()=>S.tf[tfKey()]||0,tfThem=()=>S.tfThem[tfKey()]||0;
+function addTeamFoulThem(d){const k=tfKey();S.tfThem[k]=Math.max(0,(S.tfThem[k]||0)+d);log(clockLabel()+' — '+oppName()+' team fouls '+S.tfThem[k]);save();render()}
+const foulBand=id=>{const s=st(id);return s.fouledOut?9:s.fouls>=4?4:foulRisk(id)?2:0};
+function addFoul(id,delta){
+  const s=st(id);if(delta<0&&s.fouls===0)return;
+  const band0=foulBand(id);if(delta>0)clockNudge();
+  const prevOn=S.onCourtIds.slice(),wasOut=s.fouledOut;
+  s.fouls+=delta;
+  const tk=tfKey(),tfD=delta>0?1:(S.tf[tk]||0)>0?-1:0;S.tf[tk]=(S.tf[tk]||0)+tfD;
+  S.undo.push({type:'foul',id,delta,prevOn,wasOut,tk,tfD});
+  if(s.fouls>=5&&!s.fouledOut){
+    s.fouledOut=true;S.onCourtIds=S.onCourtIds.filter(x=>x!==id);
+    log(clockLabel()+' — '+tag(id)+' FOULED OUT (5)','rp');
+    log(clockLabel()+' — RE-PLAN: '+tag(id)+' fouled out, blocks re-solved','rp');
+    replan();
+  }else if(s.fouls<5&&s.fouledOut){s.fouledOut=false;replan()}
+  else{log(clockLabel()+' — Foul '+(delta>0?'':'removed ')+tag(id)+' (F:'+s.fouls+')');
+    if(S.config.foulAware&&S.config.foulAware!=='off'&&foulBand(id)!==band0)replan()}   // only a foul that crosses a foul-trouble line re-plans
+  save();render();
+  if(delta>0)toast('F:'+s.fouls+' — '+tag(id)+' · team fouls '+tfUs()+(tfUs()===4?' (next = free throws)':tfUs()>=5?' (free throws)':''),'foulundo:'+id);
+}
+function undoLabel(u){
+  u=u||S.undo[S.undo.length-1];if(!u)return '';
+  const nm=id=>shortName(P(id));
+  if(u.type==='single')return nm(u.inId)+' in'+(u.outId?' for '+nm(u.outId):'');
+  if(u.type==='mass')return 'swap: '+u.ins.length+' in, '+u.outs.length+' out';
+  if(u.type==='foul')return (u.delta>0?'foul on ':'foul removal, ')+nm(u.id);
+  if(u.type==='score')return (u.side==='us'?tn():oppName())+' +'+u.pts;
+  if(u.type==='timeout')return (u.side==='us'?'our':oppName()+'’s')+' timeout';
+  if(u.type==='mins')return 'minutes fix on '+nm(u.id);
+  if(u.type==='scorefix')return (u.side==='us'?tn():oppName())+' −1';
+  return 'last action';
+}
+function undo(){
+  const u=S.undo.pop();if(!u){toast('Nothing to undo');return}
+  const what=undoLabel(u);
+  if(S.clockRunning)tick();
+  restoreSnap(u);
+  if(u.type==='single'){S.onCourtIds=u.prevOn;st(u.inId).consecutiveSeconds=u.prevConsec;log(clockLabel()+' — UNDO: '+tag(u.inId)+' IN'+(u.outId?' for '+tag(u.outId):'')+' retracted')}
+  else if(u.type==='mass'){S.onCourtIds=u.prevOn;Object.entries(u.prevConsec).forEach(([id,c])=>st(id).consecutiveSeconds=c);log(clockLabel()+' — UNDO: quick swap retracted (IN '+u.ins.map(id=>'#'+P(id).num).join(' ')+' • OUT '+u.outs.map(id=>'#'+P(id).num).join(' ')+' reversed)')}
+  else if(u.type==='score'){S.score[u.side]-=u.pts;S.score.ev.pop();log(clockLabel()+' — UNDO: '+(u.side==='us'?tn():oppName())+' +'+u.pts+' removed ('+S.score.us+'–'+S.score.them+')')}
+  else if(u.type==='timeout'){S.tos.pop();log(clockLabel()+' — UNDO: timeout removed')}
+  else if(u.type==='scorefix'){const ev=S.score.ev;if(u.prev.pts>1&&ev[u.i]&&ev[u.i].n===u.prev.n)ev[u.i].pts=u.prev.pts;else ev.splice(u.i,0,u.prev);S.score[u.side]++;log(clockLabel()+' — UNDO: score fix ('+S.score.us+'–'+S.score.them+')')}
+  else if(u.type==='mins'){const s=st(u.id);s.playedSeconds=u.before;s.periodSplit=u.split;log(clockLabel()+' — UNDO: minutes fix on '+tag(u.id)+' (back to '+mmss(u.before)+')')}
+  else if(u.type==='foul'){const s=st(u.id);s.fouls-=u.delta;s.fouledOut=u.wasOut;if(u.tk)S.tf[u.tk]=Math.max(0,(S.tf[u.tk]||0)-(u.tfD||0));S.onCourtIds=u.prevOn;log(clockLabel()+' — UNDO: foul change on '+tag(u.id)+' (F:'+s.fouls+')')}
+  ui.pendingOut=null;replan();save();render();
+  toast('Undone: '+what+(u.type==='mass'?' — all '+u.ins.length+' players back':''));
+}
+function setActive(id,on){
+  const p=P(id);if(p.active===on)return;p.active=on;
+  if(!on){S.onCourtIds=S.onCourtIds.filter(x=>x!==id);p.hot=false;p.hotUntil=null;p.cold=false;delete S.adj['hot:'+id];delete S.adj['cold:'+id]}
+  if(S.started)log(clockLabel()+' — RE-PLAN: '+tag(id)+(on?' added (late arrival)':' unavailable / injured')+', minutes redistributed','rp');
+  replan();save();render();
+}
+
+/* ---------- §2.5 hot / cold ---------- */
+function hotDebits(id){
+  const pt=protectedTier(),T=targets(),cands=availList().filter(p=>p.id!==id&&!p.hot&&p.tier>1&&p.tier!==pt).sort((a,b)=>b.tier-a.tier||T[a.id]-T[b.id]);
+  const deb={};let need=S.config.hotBonusMins;
+  for(const t of [...new Set(cands.map(p=>p.tier))]){
+    const grp=cands.filter(p=>p.tier===t);let prog=true;
+    while(need>=.5&&prog){prog=false;for(const p of grp){if(need<.5)break;const fl=Math.max(S.config.devFloorMins,played(p.id)/60);if(T[p.id]+(deb[p.id]||0)-.5>=fl){deb[p.id]=(deb[p.id]||0)-.5;need-=.5;prog=true}}}
+    if(need<.5)break;
+  }
+  return {deb,got:S.config.hotBonusMins-need};
+}
+function hotLbl(p){const B=blocksAll(),b=B.find(b=>b.abs1===p.hotUntil);return b?blockLabel(b).split('–')[1]+' '+qLabel(b.p):'the end'}
+function hotEnd(id){const n=nextPlanned();if(n&&n.outs.includes(id))return n.b.abs1;const now=elapsedAbs(),b=blocksAll().find(b=>b.abs0>=now&&!(S.plan[b.key]||[]).every(x=>S.onCourtIds.includes(x)));return b?b.abs1:sum(S.periods)}
+function setHot(id){
+  const p=P(id);
+  if(p.hot){p.hot=false;p.hotUntil=null;delete S.adj['hot:'+id];log(clockLabel()+' — RE-PLAN: '+tag(id)+' no longer HOT','rp');replan();save();return}
+  p.cold=false;delete S.adj['cold:'+id];
+  if(S.config.hotBonusMode){const h=hotDebits(id);if(h.got>0){ui.hotConfirm={id,...h};ui.sheet='hot';return}}
+  p.hotUntil=hotEnd(id);p.hot=true;log(clockLabel()+' — RE-PLAN: '+tag(id)+' HOT, kept on until '+hotLbl(p),'rp');replan();save();
+}
+function confirmHot(withBonus){
+  const h=ui.hotConfirm;if(!h)return;const p=P(h.id);p.hotUntil=hotEnd(h.id);p.hot=true;
+  if(withBonus){S.adj['hot:'+h.id]={...h.deb,[h.id]:h.got};
+    log(clockLabel()+' — RE-PLAN: '+tag(h.id)+' HOT +'+mt(h.got)+'m, borrowed from '+Object.keys(h.deb).map(x=>'#'+P(x).num).join(' '),'rp')}
+  else log(clockLabel()+' — RE-PLAN: '+tag(h.id)+' HOT, kept on until '+hotLbl(p),'rp');
+  ui.hotConfirm=null;ui.sheet=null;replan();save();render();
+}
+function setCold(id){
+  const p=P(id);
+  if(p.cold){p.cold=false;delete S.adj['cold:'+id];log(clockLabel()+' — RE-PLAN: '+tag(id)+' no longer COLD','rp');replan();save();return}
+  p.hot=false;p.hotUntil=null;delete S.adj['hot:'+id];p.cold=true;
+  const T=targets();let trim=Math.floor(Math.min(S.config.coldTrimMins,T[id]-played(id)/60)*2)/2;
+  const ev={};
+  if(trim>0){ev[id]=-trim;const rec=availList().filter(q=>q.id!==id&&!q.cold&&q.tier<=2).sort((a,b)=>a.tier-b.tier);let i=0,left=trim;while(left>=.5&&rec.length){const q=rec[i%rec.length];ev[q.id]=(ev[q.id]||0)+.5;left-=.5;i++}S.adj['cold:'+id]=ev}
+  log(clockLabel()+' — RE-PLAN: '+tag(id)+' COLD, trimmed '+mt(Math.max(0,trim))+'m and rested next block','rp');
+  replan();save();
+}
+
+/* ---------- periods ---------- */
+function openBreak(){ui.sheet='break'}
+function startNextPeriod(){
+  if(S.period>=S.periods.length)return;
+  S.period++;S.clockSeconds=len();S.clockRunning=false;S.pausedAt=null;S.onCourtIds.forEach(id=>st(id).consecutiveSeconds=0);
+  log(qLabel(S.period)+' ready');ui.sheet=null;replan();save();render();
+}
+function addOT(m){S.periods.push(m*60);log('Overtime added: '+m+' min');S.period++;S.clockSeconds=len();S.clockRunning=false;ui.sheet=null;replan();save();render()}
+function endPeriodEarly(){if(S.clockRunning)tick();S.clockRunning=false;log(qLabel(S.period)+' ended at '+mmss(S.clockSeconds)+' (manual)');S.clockSeconds=0;save();openBreak();render()}
+function fullTime(){S.finished=true;S.clockRunning=false;releaseWake();log('FULL TIME'+(scoreLine()?' — '+scoreLine():'')+(S.match.practice?' (practice — not saved to the season)':''));if(!S.match.practice)archiveGame();ui.sheet=null;ui.tab='logs';save();render()}
+
+/* ---------- export ---------- */
+function exportRows(){
+  const T=targets();
+  return S.roster.filter(p=>p.active||played(p.id)>0).map(p=>({p,T:T[p.id]||0,a:played(p.id)/60,s:st(p.id)}))
+    .sort((x,y)=>x.p.tier-y.p.tier||y.a-x.a);
+}
+const regMins=()=>sum(S.periods.slice(0,4))/60;
+function leagueCheck(){
+  const mins=S.roster.map(p=>played(p.id)/60).filter(m=>m>0).sort((a,b)=>b-a);
+  if(mins.length<5)return null;
+  const avg=a=>sum(a)/a.length;
+  return {top:avg(mins.slice(0,4)),bottom:avg(mins.slice(-4)),normTop:20*regMins()/32,normBottom:9.5*regMins()/32,n:mins.length};
+}
+function waText(){
+  const n=S.periods.length-4;
+  let t='🏀 '+tfull().toUpperCase()+' — MINUTES & SUBS LOG'+(S.match.practice?' (PRACTICE)':'')+'\n📅 '+S.match.date+(S.match.opp?' | vs '+S.match.opp:'')+' | ⏱ '+mt(regMins())+' min regulation'+(n>0?' + '+n+' OT':'')+'\n';
+  if(scoreLine())t+='🏆 '+scoreLine()+' · by quarter '+scoreByQ().map(q=>q.us+'–'+q.them).join(', ')+'\n';
+  {const PB=pointsBy(),ks=Object.keys(PB).sort((a,b)=>PB[b]-PB[a]);if(ks.length){const un=S.score.ev.filter(e=>e.side==='us'&&!e.by).reduce((t,e)=>t+e.pts,0);t+='🏀 Scoring: '+ks.map(id=>shortName(P(id)).replace(/^#\d+ /,'')+' '+PB[id]).join(', ')+(un?' (+'+un+' not logged)':'')+'\n'}}
+  if(S.tos.length)t+='⏱ Timeouts: '+tn()+' '+S.tos.filter(x=>x.side==='us').length+', '+oppName()+' '+S.tos.filter(x=>x.side==='them').length+'\n';
+  t+='------------------------------------\n';
+  exportRows().forEach(r=>{
+    const qs=S.periods.map((_,i)=>mt((r.s.periodSplit[i]||0)/60)).join('/');
+    t+='• #'+r.p.num+' '+r.p.name+' (T'+r.p.tier+'): '+m1(r.a)+'m / tgt '+m1(r.T)+'m | Qs ['+qs+'] | F:'+r.s.fouls+(r.s.fouledOut?' (OUT)':'')+'\n';
+  });
+  const tfq=S.periods.slice(0,4).map((_,i)=>S.tf[i+1]||0);if(tfq.some(x=>x))t+='🟨 Team fouls by quarter: '+tfq.join('/')+(S.periods.length>4?' (OT counts with Q4)':'')+'\n';
+  return t+'------------------------------------\nLogged via '+APP_NAME;
+}
+function csvText(){
+  const per=S.periods.map((_,i)=>i<4?'P'+(i+1):'OT'+(i-3));
+  const PM=plusMinus().pm,PB=pointsBy();let t='Jersey,Name,Tier,Target_Mins,Actual_Mins,Delta_Mins,'+per.join(',')+',Fouls,FouledOut,PlusMinus,Points\n';
+  exportRows().forEach(r=>{t+=[r.p.num,'"'+r.p.name.replace(/"/g,'""')+'"',r.p.tier,m1(r.T),m1(r.a),m1(r.a-r.T),...S.periods.map((_,i)=>m1((r.s.periodSplit[i]||0)/60)),r.s.fouls,r.s.fouledOut?'Y':'N',PM[r.p.id]||0,PB[r.p.id]||0].join(',')+'\n'});
+  return t;
+}
+// Copy: try the old-style copy first (works inside the claude.ai frame and most phones), then the clipboard API,
+// and if both are blocked show the text in a sheet, already selected, for a long-press Copy.
+function execCopy(text){
+  try{const t=document.createElement('textarea');t.value=text;t.style.cssText='position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;font-size:16px';
+    document.body.appendChild(t);t.focus();t.select();t.setSelectionRange(0,text.length);
+    const ok=!!(document.execCommand&&document.execCommand('copy'));t.remove();return ok}catch(e){return false}
+}
+function copyText(id){
+  const ta=document.getElementById(id);if(!ta)return;const text=ta.value;
+  const label=/^dbgpart/.test(id)?(ui.trace&&ui.trace.parts&&ui.trace.parts.length>1?'Debug trace part '+id.slice(7):'Debug trace'):({wa:'WhatsApp summary',csv:'CSV',rotcard:'Rotation card',seasoncsv:'Season CSV',backup:'Season backup'}[id]||'Text');
+  if(execCopy(text)){toast(label+' copied');return}
+  const sheet=()=>{ui.sheet='copy';ui.copyText=text;ui.copyLabel=label;renderSheet();
+    setTimeout(()=>{const t=document.getElementById('copyArea');if(t){t.focus();t.setSelectionRange(0,t.value.length)}},60)};
+  try{if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(text).then(()=>toast(label+' copied'),sheet);else sheet()}catch(e){sheet()}
+}
+
+/* ---------- render ---------- */
+function render(){
+  document.querySelectorAll('.tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.act==='tab:'+ui.tab));
+  const m=$('#main');
+  m.innerHTML=ui.tab==='live'?viewLive():ui.tab==='plan'?viewPlan():ui.tab==='setup'?viewSetup():viewLogs();
+  $('#dock').innerHTML=ui.tab==='live'&&!ui.glance?`<div class="dock"><div class="in">
+    <button class="btn undob" data-act="undo" ${S.undo.length?'':'disabled'}>↩ Undo${S.undo.length?`<span class="ul">${esc(undoLabel())}</span>`:''}</button>
+    <button class="btn" data-act="break" ${S.finished?'disabled':''}>Quarter break ⏩</button></div></div>`:'';
+  renderSheet();
+  if(ui.tab==='logs'){prepareTrace();renderTraceBox()}
+}
+// where the plan says he finishes: minutes played + the rest of the plan (the current block counts only if he's on court now)
+function projMins(id){
+  const now=elapsedAbs();let x=played(id);
+  if(!S.finished)blocksAll().forEach(b=>{if(b.abs1<=now)return;if(b.abs0<now){if(S.started&&S.onCourtIds.includes(id))x+=b.abs1-now}else if((S.plan[b.key]||[]).includes(id))x+=b.dur});
+  return x/60;
+}
+// on track = within 1 min of target; short by more than 1 (amber) or 2.5 (red); over by more than 1 (blue)
+function trackOf(id,tg){const d=projMins(id)-tg;return {d,cls:d< -2.5?'way':d< -1?'short':d>1?'over':'ok'}}
+const trackTxt=t=>t.cls==='ok'?'on track':t.d<0?m1(-t.d)+'m short':'+'+m1(t.d)+'m over';
+function card(p,T,on,ctx){
+  const s=st(p.id),a=played(p.id)/60,tg=T[p.id]||0,tot=sum(S.periods);
+  const exp=tg*elapsedAbs()/tot,pace=a-exp;
+  const pct=tg?Math.min(100,a/tg*100):0,ep=tg?Math.min(100,exp/tg*100):0;
+  const pending=ui.pendingOut===p.id;
+  const b=[];
+  if(p.hot)b.push('<span class="chip hot">🔥 Hot</span>');
+  if(p.cold)b.push('<span class="chip cold">❄️ Cold</span>');
+  if(foulRisk(p.id))b.push('<span class="chip warn">Foul risk</span>');
+  if(ctx.due.includes(p.id))b.push('<span class="chip bad">Due off</span>');
+  if(ctx.next.includes(p.id))b.push('<span class="chip go">Next on</span>');
+  const rl=(+S.config.restMaxMins||0)*60;if(on&&S.started&&rl&&s.consecutiveSeconds>=rl)b.push(`<span class="chip warn">Needs a rest · ${mmssShort(s.consecutiveSeconds)} on</span>`);
+  if(S.closersIds.includes(p.id))b.push('<span class="chip acc">Closer</span>');
+  let btn;
+  if(on)btn=`<button class="act out" data-act="out:${p.id}">${pending?'Cancel':'OUT'}</button>`;
+  else btn=`<button class="act in" data-act="in:${p.id}">IN</button>`;   // any bench player can come on; the app only suggests
+  const tk=trackOf(p.id,tg);
+  return `<div class="card ${on?'on':''} ${pending?'pending':''}" data-lp="menu:${p.id}">
+    <div class="r1"><span class="num">#${p.num}</span><span class="nm">${esc(p.name)}</span><span class="tier t${p.tier}">T${p.tier}</span>
+      <button class="fbtn ${foulRisk(p.id)?'risk':''}" data-act="foul:${p.id}" data-lp="foulm:${p.id}" aria-label="Add foul, hold to remove">F:${s.fouls}</button>${btn}
+      <button class="more" data-act="menu:${p.id}" aria-label="More">⋯</button></div>
+    <div class="r2">${b.join('')}<span>${m1(a)} / ${m1(tg)}m${tg-a>0?' · '+m1(tg-a)+' left':''}</span><span class="trk ${tk.cls}">· ${S.finished?(tk.cls==='ok'?'on target':tk.d<0?m1(-tk.d)+'m short':'+'+m1(tk.d)+'m over'):trackTxt(tk)}</span>${on&&S.started?'<span>· on '+mmssShort(s.consecutiveSeconds)+'</span>':''}</div>
+    <div class="bar ${tk.cls}" title="${S.finished?'Final minutes vs target':'Plan finishes on '+m1(projMins(p.id))+' of '+m1(tg)}"><i style="width:${pct}%"></i>${S.started?`<b style="left:${ep}%"></b>`:''}</div></div>`;
+}
+function viewGlance(){
+  const n=nextPlanned(),LC=liveCalls(),running=S.clockRunning,fd=foulDanger(),a=alertState();
+  const st0=S.finished?'Full time':running?'● Running — tap to pause':!S.started?'Tap to tip off':S.clockSeconds<=0?'Quarter over — tap for the break':'❚❚ Paused — tap to run';
+  let next='';
+  if(S.started&&!S.finished){
+    if(!n||!n.ins.length)next='<div class="gnext"><div class="gh muted">No more planned changes</div></div>';
+    else if(LC.later)next=`<div class="gnext"><div class="gh muted">Next change at the start of ${qLabel(n.b.p)}</div></div>`;
+    else{const at=blockLabel(n.b).split('–')[0],W=+S.config.onTimeSecs||0;
+      const head=n.fill?`SHORT-HANDED <span class="muted">· ${S.onCourtIds.length} on court</span>`:n.status==='overdue'?`OVERDUE <span class="muted">· due ${at}, ${mmssShort(n.late)} ago</span>`:n.status==='now'?`SUB NOW <span class="muted">· ${at}</span>`:n.status==='ready'?`GET READY <span class="muted">· ${at} in ${mmssShort(n.inSec)}</span>`:`Next: ${at} <span class="muted">· in ${mmssShort(n.inSec)}</span>`;
+      const k=Math.max(n.ins.length,n.outs.length),rows=[];for(let i=0;i<k;i++)rows.push(`<div class="grow"><span class="o">${n.outs[i]?esc(shortName(P(n.outs[i]))):''}</span><span class="muted">→</span><span class="i">${n.ins[i]?esc(shortName(P(n.ins[i]))):''}</span></div>`);
+      next=`<div class="gnext st-${n.status}"><div class="gh">${head}</div><div class="grow ghd"><span class="o">OUT</span><span></span><span class="i">IN</span></div>${rows.join('')}<button class="btn pri gbtn" data-act="qswap">Quick swap ⚡${!n.overdue&&n.inSec>W?' early':''}</button></div>`}
+  }
+  return `<div class="glance">
+    <div class="gtop"><span>${qLabel(S.period)}</span><span class="sp"></span>${S.started&&!S.finished?(ui.awake!=='none'?'<span class="trk ok">☀</span>':'<button class="chip warn" data-act="sheet:awake">⚠ May sleep</button>'):''}<span class="${tfUs()>=5?'trk way':tfUs()===4?'trk short':''}">TF ${tfUs()}</span><button class="btn sm ghost" data-act="glance:0" aria-label="Back to the full screen">✕ Full view</button></div>
+    <button class="gclock ${running?'run':'stop'}" data-act="clock" aria-label="Game clock"><div class="digits">${mmss(S.clockSeconds)}</div><div class="state">${st0}</div></button>
+    ${(()=>{const r=S.started&&!S.finished?runAgainst():null;return r?`<div class="gwarn">${esc(oppName())} on a ${r.pts}–0 run (${r.n} straight). Timeout at the next dead ball? <button class="btn sm" data-act="to:us" ${toLeft('us')>0?'':'disabled'}>⏱ Call timeout (${toLeft('us')} left)</button></div>`:''})()}
+    ${fd?`<div class="gwarn">${esc(shortName(P(fd.id)))} is on 4 fouls${fd.rep?` — <button class="btn sm" data-act="fdsub:${fd.id}:${fd.rep}">Sub ${esc(shortName(P(fd.rep)))} in</button>`:''}</div>`:''}
+    ${next}
+    ${S.started&&!S.finished?`<div class="gpanel">
+      <div class="gsrow"><span class="gsl"><span>${esc(tn())}</span><b>${S.score.us}</b></span><button class="btn gm" data-act="scm:us" ${S.score.us?'':'disabled'} aria-label="${esc(tn())} minus 1">−1</button><button class="btn" data-act="gsc:us:1">+1</button><button class="btn" data-act="gsc:us:2">+2</button><button class="btn" data-act="gsc:us:3">+3</button></div>
+      <div class="gsrow"><span class="gsl"><span>${esc(oppName())}</span><b>${S.score.them}</b></span><button class="btn gm" data-act="scm:them" ${S.score.them?'':'disabled'} aria-label="${esc(oppName())} minus 1">−1</button><button class="btn" data-act="gsc:them:1">+1</button><button class="btn" data-act="gsc:them:2">+2</button><button class="btn" data-act="gsc:them:3">+3</button></div>
+      ${scorerStrip()}
+      <div class="gfl"><span class="muted small">Foul on</span>${S.onCourtIds.map(id=>{const f=st(id).fouls;return `<button class="btn gf ${f>=4?'bad':f>=3?'warn':''}" data-act="foul:${id}" data-lp="foulm:${id}"><b>#${P(id).num}</b><em>${esc(String(P(id).name).split(/\s+/).slice(-1)[0])}</em><span>F${f}</span></button>`}).join('')}<button class="btn gf" data-act="tft:1">${esc(oppName().slice(0,6))}<span>TF ${tfThem()}</span></button></div>
+      <button class="btn gundo" data-act="undo" ${S.undo.length?'':'disabled'}>↩ Undo${S.undo.length?' '+esc(undoLabel()):''}</button></div>`:''}
+    ${S.started&&!S.finished?'':'<button class="btn ghost gexit" data-act="glance:0">Back to the full screen</button>'}</div>`;
+}
+function viewLive(){
+  if(ui.glance)return viewGlance();
+  const T=targets(),tot=sum(S.periods),f=elapsedAbs()/tot;
+  const on=S.onCourtIds.map(P).filter(Boolean);
+  const bench=availList().filter(p=>!S.onCourtIds.includes(p.id));
+  const out=S.roster.filter(p=>!p.active||st(p.id).fouledOut);
+  const pace=id=>played(id)/60-(T[id]||0)*f;
+  const lock=inLockLive();
+  const rl=(+S.config.restMaxMins||0)*60,tired=p=>rl&&st(p.id).consecutiveSeconds>=rl?1:0;
+  const dueRank=on.filter(p=>!p.hot).sort((a,b)=>(b.cold-a.cold)||(tired(b)-tired(a))||(foulRisk(b.id)-foulRisk(a.id))||(pace(b.id)-pace(a.id)));
+  const strongOn=on.filter(p=>p.tier<=2).length,floor=S.config.strongFloor,t1On=on.filter(p=>p.tier===1).length,t1F=+S.config.t1Floor||0;
+  const nextRank=bench.slice().sort((a,b)=>(a.cold-b.cold)||(foulRisk(a.id)-foulRisk(b.id))||(pace(a.id)-pace(b.id)));
+  let next=nextRank[0];
+  if(dueRank[0]&&dueRank[0].tier<=2&&strongOn<=floor){const s=nextRank.find(p=>p.tier<=2);if(s)next=s}
+  const LC=liveCalls();
+  const ctx={due:LC.due,next:LC.next,restrict:null};
+  if(!LC.show&&!lock&&S.started&&!S.finished){   // no planned change left: fall back to the live ranking
+    if(dueRank[0]&&(pace(dueRank[0].id)>0.25||dueRank[0].cold||tired(dueRank[0])||foulRisk(dueRank[0].id)))ctx.due=[dueRank[0].id];
+    if(next)ctx.next=[next.id];
+  }
+  const running=S.clockRunning,mid=S.clockSeconds>0&&S.clockSeconds<len();
+  const pausedLong=!running&&mid&&!S.finished&&S.pausedAt&&Date.now()-S.pausedAt>10000;
+  const stateTxt=S.finished?'Full time':running?'● Running — tap to pause':!S.started?'Tap to tip off':S.clockSeconds<=0?'Period over':'❚❚ Paused — tap to run';
+  const n=nextPlanned();
+  let planBox='';
+  if(S.started&&!S.finished&&(!lock||LC.closersIn||LC.later||(LC.n&&LC.n.fill))){
+    if(!n)planBox='<div class="plannext"><div class="ph muted">No more planned changes</div></div>';
+    else if(LC.later)planBox=`<div class="plannext"><div class="ph muted">No more changes this quarter — the next one is at the start of ${qLabel(n.b.p)}.</div></div>`;
+    else{
+    const at=blockLabel(n.b).split('–')[0];
+    const W=+S.config.onTimeSecs||0,kind=n.b.half===2?'Mini sub':'Change',names=n.ins.map(who).join(', ');
+    const head=n.fill?`<b>Short-handed</b> — ${S.onCourtIds.length} on court, bring on ${names}`:n.status==='overdue'?`<b>Overdue</b> — ${kind.toLowerCase()} due at ${at}, ${mmssShort(n.late)} ago`
+      :n.status==='now'?`<b>Sub now</b> — ${kind.toLowerCase()} at ${at}${n.overdue&&n.late>1?` <span class="muted">· ${mmssShort(n.late)} in</span>`:''}`
+      :n.status==='ready'?`<b>Get ready</b> — send ${names} to the table <span class="muted">· ${kind.toLowerCase()} at ${at} in ${mmssShort(n.inSec)}</span>`
+      :`<b>${kind} at ${at}</b> <span class="muted">· in ${mmssShort(n.inSec)}</span>`;
+    planBox=`<div class="plannext st-${n.status}"><div class="ph">${LC.closersIn?'<b>🔒 Get your closers on</b> · ':''}${head}</div>
+      <div class="swaps">${swapRows(n)}</div>
+      <div class="pbtns"><button class="btn pri" data-act="qswap">Quick swap ⚡${!n.overdue&&n.inSec>W?' early':''}</button>${n.status==='overdue'?'<button class="btn" data-act="skipplan">Skip this change</button>':''}</div></div>`;
+  }}
+  const hdr=`<div class="status"><span class="per">${qLabel(S.period)}${S.period<=4?' · '+(S.period<=2?'1st':'2nd')+' half':''}</span>
+    ${strongOn<floor&&on.length?`<span class="chip warn">⚠️ Low core &lt;${floor}</span>`:''}
+    ${t1F&&t1On<t1F&&on.length===5&&S.started?`<span class="chip warn">⚠️ ${t1On} T1 on</span>`:''}
+    ${bhFloorEff()&&on.length===5&&S.started&&!S.finished&&on.filter(isBHp).length<bhFloorEff()?`<span class="chip warn">⚠️ No ball-handler on</span>`:''}
+    ${on.length<5&&S.started&&!S.finished?`<span class="chip bad">${on.length} on court</span>`:''}
+    ${S.match.practice?'<span class="chip acc">Practice</span>':''}
+    ${S.started&&!S.finished?(ui.awake!=='none'?'<span class="chip go" title="Screen kept on">☀ Screen on</span>':'<button class="chip warn" data-act="sheet:awake">⚠ Screen may sleep</button>'):''}
+    ${S.started||tfUs()?`<span class="chip ${tfUs()>=5?'bad':tfUs()===4?'warn':''}" title="Team fouls this quarter">${tfUs()>=5?'Team fouls '+tfUs()+' · every foul = free throws':tfUs()===4?'Team fouls 4 · next one = free throws':'Team fouls '+tfUs()}</span>`:''}
+    ${tfThem()?`<button class="chip ${tfThem()>=5?'go':tfThem()===4?'acc':''}" data-act="sheet:score">${tfThem()>=5?esc(oppName())+' in the penalty ('+tfThem()+') · attack the rim':esc(oppName())+' team fouls '+tfThem()}</button>`:''}
+    <span class="sp"></span><span class="muted small">Pool ${mt(5*tot/60)} min</span></div>`;
+  const run=S.started&&!S.finished?runAgainst():null,tl=toLeft('us'),l2=toLeftLast2('us');
+  const scoreBar=`<div class="scorebar">
+    <button class="sb" data-act="sheet:score" aria-label="Score"><span class="tm">${esc(tn())}</span><b>${S.score.us}</b><span class="dash">–</span><b>${S.score.them}</b><span class="tm">${esc(oppName())}</span></button>
+    <button class="btn tobtn" data-act="sheet:to" ${S.started&&!S.finished?'':'disabled'}>⏱ Timeout <span class="muted small">${tl} left${l2!=null?' · '+Math.min(tl,l2)+' in last 2:00':''}</span></button></div>`;
+  return hdr+scoreBar+scorerStrip()+`
+  ${ui.nudge===S.period&&!S.clockRunning&&!S.finished&&S.clockSeconds>=len()-0.5?`<div class="banner pause">⏱ The clock hasn't started this ${S.started?'quarter':'game'}, but you're logging scores or fouls. Start it now, then Resync to the table clock. <button class="btn sm" data-act="clock">▶ Start clock</button> <button class="btn sm ghost" data-act="resync">Resync</button></div>`:''}
+  ${run?`<div class="banner bad">${esc(oppName())} on a ${run.pts}–0 run (${run.n} straight scores). Timeout at the next dead ball? <button class="btn sm" data-act="to:us" ${tl>0?'':'disabled'}>Call timeout</button></div>`:''}
+  <button class="clock ${running?'run':'stop'}" data-act="clock" data-lp="resync" aria-label="Game clock">
+    <div class="digits">${mmss(S.clockSeconds)}</div><div class="state">${stateTxt}</div></button>
+  <div class="cloaux"><button class="btn ghost" data-act="resync">⚙ Resync to table clock</button><button class="btn ghost" data-act="glance:1">👁 Glance mode</button></div>
+  ${S.finished?'<div class="banner lock">Full time. Copy the summary on Logs, then start a new match. <button class="btn sm" data-act="askreset">New match</button></div>':''}
+  ${pausedLong?'<div class="banner pause">⏸ Clock paused — minutes not counting</div>':''}
+  ${(()=>{const fd=foulDanger();if(!fd)return '';
+    return `<div class="banner bad fdb"><div><b>${who(fd.id)} is on 4 fouls</b> — one more and he's out.${lock?' The closers lock won’t move him for you.':''}</div>
+    <div class="pbtns">${fd.rep?`<button class="btn pri" data-act="fdsub:${fd.id}:${fd.rep}">Sub ${who(fd.rep)} in</button>`:''}<button class="btn" data-act="fdkeep:${fd.id}">Keep him on</button></div>
+    ${fd.alts.length?`<div class="small">Or tap OUT on him and pick: ${fd.alts.map(who).join(', ')}</div>`:''}</div>`})()}
+  ${lock?'<div class="banner lock">🔒 CLOSERS — routine subs are off. The app only prompts to get your closers on, or to cover a foul-out or injury.</div>':''}
+  ${on.length<5&&S.started&&!S.finished&&bench.length?`<div class="banner bad">Only ${on.length} on court: use Quick swap for the suggested player, or tap IN on anyone on the bench${lock?' (the closers lock never stops you bringing someone on)':''}</div>`:''}
+  ${!S.started?'<div class="note">Pre-game: OUT/IN here edits the starting five. Tap the clock to tip off. <button class="btn sm" data-act="sheet:gameday">⚡ Game-day setup</button></div>':''}
+  ${planBox}
+  <div class="cols"><div class="col"><h3>On court (${on.length}) <span class="hint">Tap F to add a foul · hold F to take one off</span></h3><div class="list">${dueRankOrder(on,[...ctx.due.map(P),...dueRank.filter(p=>!ctx.due.includes(p.id))]).map(p=>card(p,T,true,ctx)).join('')}</div></div>
+  <div class="col"><h3>Bench — next on first</h3><div class="list">${[...ctx.next.map(P).filter(p=>bench.includes(p)),...nextRank.filter(p=>!ctx.next.includes(p.id))].map(p=>card(p,T,false,ctx)).join('')||'<div class="muted">Nobody available</div>'}</div></div></div>
+  <div class="barkey muted small"><span><i style="background:var(--go)"></i>on track</span><span><i style="background:var(--warn)"></i>1–2½ min short</span><span><i style="background:var(--bad)"></i>more than 2½ short</span><span><i style="background:var(--cold)"></i>over</span><span>· colour = where the plan finishes him vs target · white line = where he should be now</span></div>
+  ${out.length?`<h3>Unavailable</h3><div class="list">${out.map(p=>`<div class="card"><div class="r1"><span class="num">#${p.num}</span><span class="nm">${esc(p.name)}</span><span class="tier t${p.tier}">T${p.tier}</span>${st(p.id).fouledOut?'<span class="chip bad">OUT(5)</span>':'<span class="chip warn">Not active</span>'}<button class="more" data-act="menu:${p.id}" aria-label="More">⋯</button></div><div class="r2">${m1(played(p.id)/60)}m played · F:${st(p.id).fouls}</div></div>`).join('')}</div>`:''}`;
+}
+function liveCalls(){
+  const lock=inLockLive(),n=nextPlanned();
+  const closersIn=!!(lock&&n&&n.ins.length&&n.ins.every(id=>S.closersIds.includes(id)));
+  const later=!!(n&&!n.overdue&&n.b.p>S.period&&S.clockSeconds>0);   // due next quarter: keep it for the break
+  const show=!!(S.started&&!S.finished&&n&&!later&&(!lock||closersIn||n.fill));
+  return {lock,n,closersIn,later,show,due:show?n.outs.slice():[],next:show?n.ins.slice():[]};
+}
+// one foul from fouling out: flag it straight away (even in the closers lock) and suggest the best bench replacement
+function foulDanger(){
+  if(!S.started||S.finished)return null;
+  const id=S.onCourtIds.find(x=>st(x).fouls===4&&(S.foulAck||{})[x]!==4);if(!id)return null;
+  const T=targets(),owed=p=>(T[p.id]||0)*60-played(p.id);
+  const bench=availList().filter(p=>!S.onCourtIds.includes(p.id)).sort((a,b)=>a.tier-b.tier||owed(b)-owed(a));
+  return {id,rep:bench[0]?bench[0].id:null,alts:bench.slice(1,3).map(p=>p.id)};
+}
+// the change to offer in our timeout: this quarter's next change, never next quarter's, never during the closers lock
+function timeoutChange(){const n=nextPlanned();return n&&n.ins.length&&(n.fill||!inLockLive())&&!(n.b.p>S.period&&!n.overdue)?n:null}
+function dueRankOrder(on,due){const r=due.slice();on.forEach(p=>{if(!r.includes(p))r.push(p)});return r}
+
+// one-page rotation sheet for the clipboard: who's on in each block, targets, boxes to tick fouls and timeouts by hand
+// half-time: one screen to talk from — score, who's behind on minutes, foul trouble, best +/−
+function halfTimeCard(){
+  const T=targets(),av=availList();
+  const short=av.map(p=>({p,t:trackOf(p.id,T[p.id]||0)})).filter(x=>x.t.cls==='short'||x.t.cls==='way').sort((a,b)=>a.t.d-b.t.d);
+  const toCome=av.map(p=>({p,m:projMins(p.id)-played(p.id)/60})).filter(x=>x.m>=4).sort((a,b)=>b.m-a.m).slice(0,4);
+  const fouls=S.roster.filter(p=>st(p.id).fouls>=2).sort((a,b)=>st(b.id).fouls-st(a.id).fouls);
+  const {pm,counted}=plusMinus(),best=counted?av.filter(p=>played(p.id)>0).sort((a,b)=>(pm[b.id]||0)-(pm[a.id]||0)).slice(0,3):[];
+  const PB=pointsBy(),scorers=Object.keys(PB).sort((a,b)=>PB[b]-PB[a]).slice(0,3);
+  const nm=p=>esc(shortName(p));
+  return `<div class="htc">
+    <div class="htr"><b>Minutes:</b> ${short.length?short.map(x=>`<span class="trk ${x.t.cls}">${nm(x.p)} will finish ${m1(-x.t.d)} short</span>`).join(' · '):'<span class="trk ok">the plan finishes everyone within a minute of target</span>'}${toCome.length?`<br><span class="muted small">Big 2nd half for: ${toCome.map(x=>nm(x.p)+' '+m1(x.m)+' min').join(' · ')} — worth telling them now.</span>`:''}</div>
+    <div class="htr"><b>Fouls:</b> ${fouls.length?fouls.map(p=>`<span class="${st(p.id).fouls>=3?'trk way':'trk short'}">${nm(p)} F${st(p.id).fouls}</span>`).join(' · ')+(fouls.some(p=>st(p.id).fouls>=3)?' <span class="muted small">— 3 by half-time: be careful</span>':''):'<span class="muted">nobody on 2+</span>'} · team fouls reset now</div>
+    ${best.length?`<div class="htr"><b>Best +/−:</b> ${best.map(p=>`${nm(p)} ${(pm[p.id]||0)>0?'+':''}${pm[p.id]||0}`).join(' · ')}</div>`:''}
+    ${scorers.length?`<div class="htr"><b>Scoring:</b> ${scorers.map(id=>nm(P(id))+' '+PB[id]).join(' · ')}</div>`:''}
+    <div class="htr muted small">Talk: one thing that's working, one to fix, then the plan for Q3.</div></div>`;
+}
+function rotationSheet(){
+  const T=targets(),B=blocksAll(),rows=S.roster.filter(p=>p.active&&!st(p.id).fouledOut).sort((a,b)=>a.tier-b.tier||a.num-b.num);
+  const head='<th>#</th><th>Player</th><th>T</th>'+B.map(b=>`<th class="${b.s===0&&!b.half?'q':''}">${b.half===2?'↳':''}${qLabel(b.p)}<br>${mmssShort(S.periods[b.p-1]-b.s)}${inLockBlock(b)?' 🔒':''}</th>`).join('')+'<th>Target</th><th>Fouls</th>';
+  const body=rows.map(p=>`<tr><td><b>${p.num}</b></td><td class="n">${esc(p.name)}${p.bh?' (BH)':''}${S.closersIds.includes(p.id)?' ©':''}</td><td>${p.tier}</td>`+B.map(b=>{const on=(S.plan[b.key]||[]).includes(p.id);return `<td class="${on?'on':''} ${b.s===0&&!b.half?'q':''}">${on?'●':''}</td>`}).join('')+`<td>${m1(T[p.id]||0)}</td><td class="boxes">☐☐☐☐☐</td></tr>`).join('');
+  const q=S.periods.slice(0,4).map((_,i)=>`<tr><td>Q${i+1}</td><td class="boxes">☐☐☐☐ ☐</td><td class="boxes">☐☐☐☐ ☐</td></tr>`).join('');
+  return `<div class="pbar"><button data-act="printgo">🖨 Print</button><button class="g" data-act="printclose">Close</button></div>
+  <h1>${esc(tfull())}${S.match.opp?' vs '+esc(S.match.opp):''}</h1>
+  <p class="ps">${esc(S.match.date)} · ${S.config.quarterMins}-minute quarters · ${S.config.shiftLength}-minute blocks · ● = on court · © = closer · BH = ball-handler · printed ${esc(clockLabel())}</p>
+  <table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>
+  <div class="pgrid"><div><b>Team fouls</b> (5th = their free throws) and <b>timeouts</b>
+    <table><thead><tr><th></th><th>${esc(tn())} fouls</th><th>${esc(oppName())} fouls</th></tr></thead><tbody>${q}</tbody></table>
+    <table><tbody><tr><td class="n">Timeouts — 1st half</td><td class="boxes">☐☐</td><td class="n">2nd half (max 2 in last 2:00)</td><td class="boxes">☐☐☐</td><td class="n">OT</td><td class="boxes">☐</td></tr></tbody></table></div>
+  <div><pre>${esc(rotationCard().split(/\n-+\nPlanned minutes/)[0])}</pre></div></div>`;
+}
+function openPrint(){const el=document.getElementById('printv');if(!el)return;el.innerHTML=rotationSheet();el.hidden=false}
+function closePrint(){const el=document.getElementById('printv');if(el){el.hidden=true;el.innerHTML=''}}
+function viewPlan(){
+  const T=targets(),B=blocksAll(),now=elapsedAbs();
+  const rows=S.roster.filter(p=>p.active||played(p.id)>0).sort((a,b)=>a.tier-b.tier||b.num-a.num);
+  const planned=id=>{let s=played(id);B.forEach(b=>{if(b.abs1<=now)return;const pl=S.plan[b.key]||[];if(pl.includes(id))s+=b.abs0>=now?b.dur:b.abs1-now});return s/60};
+  const cls=b=>(b.abs1<=now?'past ':'')+(b.abs0<now&&now<b.abs1?'curcol':'');
+  const head='<th>Player</th>'+B.map(b=>`<th class="${cls(b)} ${b.half===2?'halfcol':''}"><button class="bh" data-act="blk:${b.key}" aria-label="Edit ${blockLabel(b)}">${inLockBlock(b)?'🔒':''}${S.pinned[b.key]?'📌':''}${b.half===2?'↳ ':''}${qLabel(b.p)}<br><span class="muted small">${mmssShort(S.periods[b.p-1]-b.s)}${S.moves[b.key]?'*':''}</span></button></th>`).join('')+'<th>Tgt</th><th>Plan</th><th>Δ</th>';
+  const body=rows.map(p=>{
+    const pl=planned(p.id),d=pl-(T[p.id]||0);
+    return `<tr><td><b>#${p.num}</b> ${esc(p.name)} <span class="tier t${p.tier}">T${p.tier}</span></td>`+B.map(b=>`<td class="${cls(b)}"><span class="cell ${(S.plan[b.key]||[]).includes(p.id)?'f'+p.tier:''}"></span></td>`).join('')+
+    `<td>${m1(T[p.id]||0)}</td><td>${m1(pl)}</td><td class="${Math.abs(d)>S.config.shiftLength/2+0.01?'lowcore':'muted'}">${d>=0?'+':''}${m1(d)}</td></tr>`}).join('');
+  const t1row='<tr><td class="muted">T1s on</td>'+B.map(b=>{const c=(S.plan[b.key]||[]).filter(id=>tierOf(id)===1).length;return `<td class="${cls(b)} ${c<(+S.config.t1Floor||0)?'lowcore':'muted'}">${c}</td>`}).join('')+'<td></td><td></td><td></td></tr>';
+  const bhrow=bhFloorEff()?'<tr><td class="muted">Ball-handlers</td>'+B.map(b=>{const c=(S.plan[b.key]||[]).filter(id=>isBHp(P(id))).length;return `<td class="${cls(b)} ${c<bhFloorEff()?'lowcore':'muted'}">${c}</td>`}).join('')+'<td></td><td></td><td></td></tr>':'';
+  const core='<tr><td class="muted">Core (T1+T2)</td>'+B.map(b=>{const c=(S.plan[b.key]||[]).filter(id=>tierOf(id)<=2).length;return `<td class="${cls(b)} ${c<S.config.strongFloor?'lowcore':'muted'}">${c}</td>`}).join('')+'<td></td><td></td><td></td></tr>';
+  return `<h2>Rotation plan</h2>${coreWarn()?`<div class="banner pause fdb"><span>⚠ ${esc(coreWarn())}</span><div class="pbtns"><button class="btn sm" data-act="cfg:strongFloor:${coreShort(baseTargets()).floor-1}">Set core floor to ${coreShort(baseTargets()).floor-1}</button></div></div>`:''}
+  <div class="legend"><span>↳ = mini sub (one change mid-block)</span><span><i style="background:var(--t1)"></i>T1 Core</span><span><i style="background:var(--t2)"></i>T2 Rotation</span><span><i style="background:var(--t3)"></i>T3 Development</span><span><i style="background:var(--t4)"></i>T4 Emerging</span><span>🔒 Closers block</span><span>📌 Lineup you locked</span><span>* Change time moved</span></div>
+  <p class="note" style="margin-top:0">Tap a block's time to lock its lineup or move the change earlier or later.</p>
+  <div class="tbl"><table class="pg"><thead><tr>${head}</tr></thead><tbody>${body}${t1row}${bhrow}${core}</tbody></table></div>
+  <h2>Rotation card</h2>
+  <p class="note" style="margin-top:0">The plan as plain text for an assistant or the bench. Copy it into WhatsApp before the game; it updates as the plan changes.</p>
+  <div class="grid2" style="margin-top:8px"><button class="btn pri" data-act="copy:rotcard">Copy rotation card</button><button class="btn" data-act="print">🖨 Rotation sheet</button></div>
+  <details class="rcd"><summary>Preview</summary><pre class="rc">${esc(rotationCard())}</pre></details>
+  <textarea id="rotcard" readonly style="position:absolute;left:-9999px;width:1px;height:1px">${esc(rotationCard())}</textarea>
+  <p class="note">${S.config.shiftLength}-minute blocks, at least ${S.config.strongFloor} core players per block. This plan is advice: it re-solves from the current clock after every sub, foul-out, hot/cold call or attendance change. Plan vs target can differ by up to ${mt(S.config.shiftLength/2)} min — that's expected. The game clock is the only record used in exports.</p>`;
+}
+function seg(key,opts,cur,fmt){return `<div class="seg">${opts.map(o=>`<button data-act="cfg:${key}:${o}" aria-pressed="${cur===o}">${fmt?fmt(o):o}</button>`).join('')}</div>`}
+function viewSetup(){
+  const T=targets(),c=S.config,CU=catchUp();
+  const nStart=S.roster.filter(p=>p.starter&&p.active).length,nClose=S.closersIds.filter(id=>P(id)&&P(id).active).length;
+  const rows=S.roster.slice().sort((a,b)=>a.tier-b.tier||a.num-b.num).map(p=>`<tr>
+    <td><input type="number" id="num-${p.id}" data-chg="num:${p.id}" value="${p.num}" style="width:64px" inputmode="numeric"></td>
+    <td><input type="text" id="nm-${p.id}" data-chg="name:${p.id}" value="${esc(p.name)}" style="width:140px"></td>
+    <td><select id="tier-${p.id}" data-chg="tier:${p.id}">${[1,2,3,4].map(t=>`<option value="${t}" ${p.tier===t?'selected':''}>T${t}</option>`).join('')}</select></td>
+    <td><button class="tog" data-act="active:${p.id}" aria-pressed="${p.active}">${p.active?'In':'Out'}</button></td>
+    <td><button class="tog c" data-act="starter:${p.id}" aria-pressed="${!!p.starter}">S</button></td>
+    <td><button class="tog c" data-act="closer:${p.id}" aria-pressed="${S.closersIds.includes(p.id)}">C</button></td>
+    <td><button class="tog c" data-act="bh:${p.id}" aria-pressed="${!!p.bh}" aria-label="Ball-handler">BH</button></td>
+    <td>${p.active&&!st(p.id).fouledOut?m1(T[p.id]||0)+'m'+(CU.give[p.id]?` <span class="trk short small">+${m1(CU.give[p.id])} catch-up</span>`:CU.take[p.id]?` <span class="muted small">−${m1(CU.take[p.id])}</span>`:''):'—'}</td>
+    <td>${!S.started||played(p.id)===0?`<button class="tog c" data-act="askdel:${p.id}" aria-label="Remove from squad">✕</button>`:''}</td></tr>`).join('');
+  const cw=coreWarn(),onoff=v=>v?'on':'off',anyN=v=>v?String(v):'any';
+  const sec=(id,title,sum,body,warn)=>{const open=secOpen(id)||!!warn;return `<section class="sec${warn?' secwarn':''}"><button class="sechd" data-act="sec:${id}" aria-expanded="${open}"><span class="st">${warn?'⚠ ':''}${title}</span><span class="ss">${sum}</span><span class="chev" aria-hidden="true">${open?'▴':'▾'}</span></button>${open?`<div class="secbd">${body}</div>`:''}</section>`};
+  return `<button class="btn pri" style="width:100%;margin:6px 0 10px" data-act="sheet:gameday">⚡ Game-day setup — who's here, starters, opponent</button>
+  ${sec('match','Match',`${esc(tn())} v ${esc(S.match.opp||'?')} · ${esc(S.match.date||'')} · ${S.match.practice?'Practice':'Game'}`,`<div class="fields">
+    <div class="field"><label for="tname">Our team — short name</label><input id="tname" class="inp" type="text" data-chg="cfgtxt:teamName" value="${esc(S.config.teamName||'')}" placeholder="e.g. Tigers"><span class="muted small">On the score bar and glance screen, where space is tight.</span></div>
+    <div class="field"><label for="tfull">Our team — full name</label><input id="tfull" class="inp" type="text" data-chg="cfgtxt:teamFull" value="${esc(S.config.teamFull||'')}" placeholder="e.g. Riverside Tigers U16"><span class="muted small">On printouts and WhatsApp summaries. Leave blank to use the short name.</span></div>
+    <div class="field"><label for="opp">Opponent</label><input id="opp" type="text" data-chg="opp" value="${esc(S.match.opp)}" placeholder="e.g. their club name"><span class="muted small">On the score bar, run alerts and summaries.</span></div>
+    <div class="field"><label for="mdate">Date</label><input id="mdate" type="text" data-chg="date" value="${esc(S.match.date)}"><span class="muted small">On printouts and in the season table.</span></div>
+    <div class="field"><label>Match type</label><div class="seg"><button data-act="practice:0" aria-pressed="${!S.match.practice}">Game</button><button data-act="practice:1" aria-pressed="${!!S.match.practice}">Practice</button></div><span class="muted small">Practice games aren't saved to the season. Starts as Game for every new match.</span></div>
+  </div>`)}
+  ${sec('squad','Squad &amp; tiers',`${availList().length} here · starters ${nStart}/5 · closers ${nClose}/5`,`  <div class="status"><span class="chip ${nStart===5?'go':'warn'}">Starters ${nStart}/5</span><span class="chip ${nClose===5?'go':'warn'}">Closers ${nClose}/5</span><span class="chip acc">${availList().length} active</span></div>
+  <div class="tbl" style="margin-top:8px"><table><thead><tr><th>#</th><th>Name</th><th>Tier</th><th>Here</th><th>Start</th><th>Close</th><th>Ball</th><th>Target</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+  <div style="margin-top:8px"><button class="btn" data-act="addplayer">+ Add player</button></div>
+  <p class="note">Set the rough minutes per tier below; the app rounds each target to the half-minute. ✕ removes a player from the squad for good (his season minutes stay in the season table). For one game, use "Out" instead. Marking someone "Out" mid-game redistributes his remaining minutes and keeps what he has already played.</p>
+`)}
+  ${sec('mins','Game &amp; minutes',`4×${c.quarterMins} min · ${c.shiftLength}-min shifts · ${[1,2,3,4].map(t=>mt(c.tierMins[t])).join(' / ')}`,`
+  <h3>Game length</h3><div class="fields">
+    <div class="field"><label>Quarter length</label>${seg('quarterMins',[6,7,8,10],c.quarterMins,o=>o+' min')}<span class="muted small">${S.started?'Locked once the game has started.':'Basketball NI U16 plays 4 × 8.'}</span></div>
+    <div class="field"><label>Overtime length</label>${seg('otLengthMins',[3,4,5],c.otLengthMins,o=>o+' min')}<span class="muted small">Basketball NI U16 (FIBA) overtime is 4 minutes.</span></div>
+    <div class="field"><label>Shift block</label>${seg('shiftLength',[4,3,2],c.shiftLength,o=>o+' min')}<span class="muted small">How often the planned changes come. 4 min = two changes a quarter, easy to run from the bench.</span></div>
+  </div>
+  <div class="hline"><h3>Minutes per tier</h3><button class="btn ghost sm" data-act="tmreset" aria-label="Reset tier minutes to 20, 15, 10, 6">↺ 20/15/10/6</button></div>
+  <div class="tiers">${[1,2,3,4].map(t=>{const ps=availList().filter(p=>p.tier===t),ex=ps[0];return `<div class="trow"><span class="tier t${t}">T${t}</span><span class="tn">${TIERNAME[t]}<br><span class="muted small">${ps.length} player${ps.length===1?'':'s'}${ex?' · target '+m1(T[ex.id]||0)+'m each':''}</span></span>
+    <button class="step" data-act="tm:${t}:-1" aria-label="Fewer minutes">−</button><span class="tval">${mt(c.tierMins[t])}</span><button class="step" data-act="tm:${t}:1" aria-label="More minutes">+</button></div>`}).join('')}</div>
+  <p class="note">${(()=>{const asg=sum(availList().map(p=>wt(p))),pool=5*sum(S.periods)/60;return `You've asked for <b>${mt(asg)}</b> of the <b>${mt(pool)}</b> player-minutes in a game. `+(Math.abs(asg-pool)<0.5?'That fits exactly.':asg>pool?'Every target is scaled down a little so it adds up.':'Every target is scaled up a little so it adds up.')})()} League norm: top four ≈ 20 min, bottom four ≈ 9½.</p>
+  <h3>Season</h3><div class="fields">
+    <div class="field"><label>Season catch-up</label>${seg('catchUp',[0,1,2,3],+c.catchUp||0,o=>o?'up to '+o+' min':'Off')}<span class="muted small">Players behind their season minutes get some back this game, taken from T1s first. Practice games don't count.</span></div>
+  </div>`)}
+  ${sec('court','Who\'s on court',`core ${c.strongFloor} · T1s ${anyN(c.t1Floor)} · ball-handlers ${anyN(+c.bhFloor)}`,`<div class="fields">
+    <div class="field"><label>Core floor (T1+T2 on court)</label>${seg('strongFloor',[2,3,4],c.strongFloor)}<span class="muted small">At least this many T1/T2 players on court at all times. 3 suits a squad with 6 or fewer core players.</span>${coreWarn()?`<span class="small" style="color:var(--warn)">⚠ ${esc(coreWarn())}</span>`:''}</div>
+    <div class="field"><label>T1s on court, at least</label>${seg('t1Floor',[0,1,2,3],c.t1Floor,o=>o?String(o):'Any')}<span class="muted small">Stops the plan putting out lineups with only one T1. With 4 T1s, 2 fits every block.</span></div>
+    <div class="field"><label>Ball-handlers on court, at least</label>${seg('bhFloor',[0,1,2],+c.bhFloor||0,o=>o?String(o):'Any')}<span class="muted small">Tag with <b>BH</b> in the squad list. Now: ${S.roster.filter(p=>p.bh&&p.active).map(p=>'#'+p.num).join(', ')||'nobody tagged'}.</span></div>
+    <div class="field"><label>Lowest tier one at a time</label>${seg('spreadLow',[true,false],c.spreadLow,o=>o?'On':'Off')}<span class="muted small">Spreads the T4s out so two are rarely on court together.</span></div>
+    <div class="field"><label>Rest guard</label>${seg('restMaxMins',[0,6,8,10],c.restMaxMins,o=>o?o+' min':'Off')}<span class="muted small">Plans around long stints and flags anyone on this long.</span></div>
+    <div class="field"><label>Foul-aware plan</label>${seg('foulAware',['gentle','strict','off'],c.foulAware,o=>({gentle:'Gentle',strict:'Strict',off:'Off'})[o])}<span class="muted small">2 fouls in the 1st half, 3 before Q4, or 4. Gentle moves his minutes later; Strict sits him at the next change.</span></div>
+  </div>`,cw)}
+  ${sec('subs','Subs &amp; closers',`max ${anyN(+c.maxSubs)} at once · mini subs ${c.miniSubs||'off'} · lock ${c.closerLockSeconds?'last '+c.closerLockSeconds/60+':00':'off'}`,`<div class="fields">
+    <div class="field"><label>Most players changed at once</label>${seg('maxSubs',[2,3,4,0],+c.maxSubs||0,o=>o?String(o):'Any')}<span class="muted small">Keeps the rest of the five together. 3 is as fair as no limit. 2 adds an extra one-player change when needed.</span></div>
+    <div class="field"><label>…at quarter breaks</label>${seg('maxSubsBreaks',[true,false],c.maxSubsBreaks!==false,o=>o?'Same limit':'No limit')}<span class="muted small">Quarter breaks are a natural moment for a bigger change, if you'd rather allow it.</span></div>
+    <div class="field"><label>Mini subs (half-shifts) per quarter</label>${seg('miniSubs',[0,1,2],c.miniSubs,o=>o?String(o):'Off')}<span class="muted small">One mid-block change when it gets someone closer to his minutes.${+c.maxSubs===2&&(c.miniSubs|0)<2?' <b>Using 2</b> while "most changed at once" is 2.':''}</span></div>
+    <div class="field"><label>Closers lock</label>${seg('closerLockSeconds',[0,120,240],c.closerLockSeconds,o=>o?'Last '+o/60+':00':'Off')}<span class="muted small">Your five closers (C in the squad list) play the end of Q4. Changes stop then.</span></div>
+    <div class="field"><label>Closers in overtime</label>${seg('lockOT',[true,false],c.lockOT,o=>o?'Locked':'Free')}<span class="muted small">Locked: the closers play all of overtime (needs the closers lock on). Free: subs carry on as normal.</span></div>
+  </div>`)}
+  ${sec('hot','Hot &amp; cold',`hot bonus ${onoff(c.hotBonusMode)} · cold −${c.coldTrimMins}m`,`<div class="fields">
+    <div class="field"><label>Hot bonus (borrow from bench)</label>${seg('hotBonusMode',[false,true],c.hotBonusMode,o=>o?'On':'Off')}<span class="muted small">Off: a player marked 🔥 hot stays on longer and gives the time back later. On: he keeps the extra, borrowed from T2/T3 (never the lowest tier). You confirm who first.</span></div>
+    <div class="field"><label>Hot bonus size</label>${seg('hotBonusMins',[2,3,4],c.hotBonusMins,o=>'+'+o+'m')}<span class="muted small">How many extra minutes a hot player keeps when the bonus is on.</span></div>
+    <div class="field"><label>Cold trim</label>${seg('coldTrimMins',[1,2,3],c.coldTrimMins,o=>'−'+o+'m')}<span class="muted small">A player marked ❄️ cold sits at the next change and loses this much off his target. It goes to the T1/T2s.</span></div>
+    <div class="field"><label>Never below (bench floor)</label>${seg('devFloorMins',[3,4,6],c.devFloorMins,o=>o+' min')}<span class="muted small">When the hot bonus borrows minutes, nobody is taken below this.</span></div>
+  </div>`)}
+  ${sec('alerts','Alerts',`ready ${c.readySecs?c.readySecs+'s':'off'} · buzz ${c.haptics||'strong'} · flash ${onoff(c.flash!==false)}`,`<div class="fields">
+    <div class="field"><label>Get-ready warning</label>${seg('readySecs',[0,30,60,90],c.readySecs,o=>o?o+'s':'Off')}<span class="muted small">Tells you who to send to the table.</span></div>
+    <div class="field"><label>Counts as on time within</label>${seg('onTimeSecs',[0,30,45,60],c.onTimeSecs,o=>o?'±'+o+'s':'Exact')}<span class="muted small">Waiting for a dead ball isn't "late".</span></div>
+    <div class="field"><label>Vibration</label>${seg('haptics',['strong','light','off'],c.haptics||'strong',o=>o==='strong'?'Strong':o==='light'?'Light':'Off')}<span class="muted small">Get ready, sub now, overdue, 4 fouls, end of quarter. Android only.</span></div>
+    <div class="field"><label>Screen flash</label>${seg('flash',[true,false],c.flash!==false,o=>o?'On':'Off')}<span class="muted small">Amber get ready, green sub now, red overdue. Every phone.</span></div>
+  </div>`)}
+  ${sec('reset','Reset','new match or back to defaults',`<div class="stack">
+    <button class="btn danger" data-act="askreset">New match — clear clock, minutes &amp; fouls</button>
+    <button class="btn danger" data-act="askfactory">Reset everything to defaults</button>
+  </div>
+  <p class="note">New match keeps your squad, tiers, starters, closers and rules. Reset everything also puts the squad, tier minutes and rules back to the original defaults.</p>`)}
+  <p class="note" style="text-align:center">${esc(APP_NAME)} · version ${esc(APP_VERSION)} · <button class="btn sm ghost" data-act="sheet:about">About &amp; privacy</button></p>`;
+}
+const SEC_DEF={match:1,squad:1};
+function secOpen(id){if(!ui.sec){ui.sec={...SEC_DEF};try{const v=JSON.parse(localStorage.getItem('pumas_setup_open')||'null');if(v&&typeof v==='object')ui.sec=v}catch(e){}}return !!ui.sec[id]}
+function secToggle(id){secOpen(id);ui.sec[id]=!ui.sec[id];try{localStorage.setItem('pumas_setup_open',JSON.stringify(ui.sec))}catch(e){}}
+function pmSection(){
+  const {pm,units,counted}=plusMinus();if(!counted)return S.score.ev.length?'':'';
+  const PB=pointsBy(),anyPts=Object.keys(PB).length,unass=S.score.ev.filter(e=>e.side==='us'&&!e.by).reduce((t,e)=>t+e.pts,0);
+  const rows=exportRows().filter(r=>r.a>0).map(r=>({p:r.p,a:r.a,v:pm[r.p.id]||0,pts:PB[r.p.id]||0})).sort((x,y)=>y.v-x.v||y.a-x.a);
+  const sg=v=>v>0?'+'+v:v<0?'−'+(-v):'0';
+  const nm=ids=>ids.map(id=>P(id)?'#'+P(id).num:'?').join(' ');
+  return `<h2>Plus / minus</h2><p class="muted small" style="margin-top:0">Points for minus points against while he was on court (${counted} logged score${counted===1?'':'s'}). Small numbers: a talking point, not a verdict.${anyPts&&unass?' '+unass+' of our points have no scorer.':''}</p>
+  <div class="tbl"><table><thead><tr><th>Player</th><th>Mins</th>${anyPts?'<th>Pts</th>':''}<th>+/−</th></tr></thead><tbody>${rows.map(r=>`<tr><td><b>#${r.p.num}</b> ${esc(r.p.name)} <span class="tier t${r.p.tier}">T${r.p.tier}</span></td><td>${m1(r.a)}</td>${anyPts?`<td>${r.pts||'·'}</td>`:''}<td class="trk ${r.v>0?'ok':r.v<0?'way':''}"><b>${sg(r.v)}</b></td></tr>`).join('')}</tbody></table></div>
+  ${units.length?`<h3>Five-man units (2+ min together)</h3><div class="tbl"><table class="pmu"><thead><tr><th>Five</th><th>Min</th><th>Score</th><th>+/−</th></tr></thead><tbody>${units.slice(0,6).map(u=>`<tr><td>${nm(u.ids)}</td><td>${m1(u.sec/60)}</td><td>${u.for}–${u.against}</td><td class="trk ${u.pm>0?'ok':u.pm<0?'way':''}"><b>${sg(u.pm)}</b></td></tr>`).join('')}</tbody></table></div>`:''}`;
+}
+function viewLogs(){
+  const L=S.subLogs.slice().reverse().map(l=>`<div class="${l.kind==='rp'?'rp':''}"><span class="t">${l.time}</span>${esc(l.text)}</div>`).join('')||'<div class="muted">No events yet.</div>';
+  return `${S.finished&&S.match.practice?'<div class="banner lock">Practice match — not saved to the season. <button class="btn sm" data-act="archive">Save it anyway</button></div>':''}${pmSection()}<h2>Sub log</h2><div class="log">${L}</div>
+  ${(()=>{const t=seasonTable();
+    const head=`<div class="hline"><h2>Season</h2>${S.started&&!S.archived&&!S.match.practice?'<button class="btn sm" data-act="archive">Save this game</button>':''}<button class="btn sm ghost" data-act="sheet:import">+ Past game</button>${t?'<button class="btn sm ghost" data-act="sheet:season">Manage</button>':''}</div>`;
+    if(!t)return head+'<div style="margin-top:8px"><button class="btn ghost" data-act="sheet:restore">Restore from a backup</button></div><p class="note">Games are saved here at full time, so you can see minutes across the season. Add earlier games from their CSV or WhatsApp summary.</p>';
+    const behind=t.rows.filter(r=>r.fair==='short'||r.fair==='way');
+    return head+`<p class="muted small">${t.games.length} game${t.games.length===1?'':'s'}${t.w+t.l?' · won '+t.w+', lost '+t.l:''} · minutes per game</p>
+    <div class="fair">${behind.length?'<b>Behind on minutes:</b> '+behind.map(r=>`<span class="trk ${r.fair}">#${r.num} ${esc(String(r.name).split(/\s+/).slice(-1)[0])} −${m1(-r.dt)}m over ${r.gt} game${r.gt===1?'':'s'}</span>`).join(' · ')+'<br><span class="muted small">Worth a word with him, or a bigger tier target next game.</span>':(t.rows.some(r=>r.gt)?'<span class="trk ok">Everyone is within a minute a game of his target.</span>':'')}</div>
+    <div class="tbl"><table class="ssn"><thead><tr><th>Player</th>${t.games.map(g=>`<th>${esc(String(g.date).slice(0,5))}<br><span class="muted small">${esc((g.opp||'').slice(0,8))}</span></th>`).join('')}<th>Total</th><th>Avg</th><th>vs target</th><th>+/−</th><th>Pts</th></tr></thead>
+    <tbody>${t.rows.map(r=>`<tr><td><b>#${r.num}</b> ${esc(r.name)} <span class="tier t${r.tier}">T${r.tier}</span></td>${r.cells.map(c=>`<td>${c==null?'<span class="muted">—</span>':m1(c)}</td>`).join('')}<td><b>${m1(r.tot)}</b></td><td>${r.gp?m1(r.tot/r.gp):'—'}</td><td class="trk ${r.fair}">${r.gt?(r.dt>=0?'+':'−')+m1(Math.abs(r.dt)):'—'}</td><td>${r.pmg?(r.pm>0?'+':r.pm<0?'−':'')+Math.abs(r.pm):'—'}</td><td>${r.pts||'—'}</td></tr>`).join('')}</tbody></table></div>
+    <div class="grid2" style="margin-top:8px"><button class="btn" data-act="copy:seasoncsv">Copy season CSV</button><button class="btn" data-act="copy:backup">💾 Copy season backup</button></div>
+    <textarea id="seasoncsv" readonly style="position:absolute;left:-9999px;width:1px;height:1px">${esc(seasonCsv())}</textarea>
+    <textarea id="backup" readonly style="position:absolute;left:-9999px;width:1px;height:1px">${esc(backupText())}</textarea>
+    <p class="note">Season data lives only on this phone. <b>Copy season backup</b> after each game and paste it into WhatsApp or the project, so a lost phone doesn't lose the season. <button class="btn sm ghost" data-act="sheet:restore">Restore</button></p>`})()}
+  <h2>WhatsApp summary</h2><textarea id="wa" readonly>${esc(waText())}</textarea>
+  <div style="margin-top:8px"><button class="btn pri" data-act="copy:wa">Copy for WhatsApp</button></div>
+  <h2>CSV</h2><textarea id="csv" readonly style="min-height:140px">${esc(csvText())}</textarea>
+  <div style="margin-top:8px"><button class="btn" data-act="copy:csv">Copy CSV</button></div>
+  <p class="note">All minutes come from the game clock, not the plan. Copy the summary before you start a new match.</p>
+  <h2>Debug trace</h2>
+  <p class="note" style="margin-top:0">App version <b>${esc(APP_VERSION)}</b></p>
+  <div id="dbgbox"><p class="note">Preparing the trace…</p></div>
+  <h2>Next game</h2><button class="btn danger" data-act="askreset">New match — clear clock, minutes &amp; fouls</button>`;
+}
+function renderSheet(){
+  const el=$('#sheet');if(!ui.sheet){el.innerHTML='';return}
+  let h='';
+  if(ui.sheet==='menu'){
+    const p=P(ui.sheetId),on=S.onCourtIds.includes(p.id),av=p.active&&!st(p.id).fouledOut;
+    h=`<h2>#${p.num} ${esc(p.name)}</h2><div class="stack">
+      ${av?`<button class="btn" data-act="hot:${p.id}">${p.hot?'Clear 🔥 hot':'🔥 Hot — keep him on through the next block'}</button>
+      <button class="btn" data-act="cold:${p.id}">${p.cold?'Clear ❄️ cold':'❄️ Cold — rest him next, trim minutes'}</button>`:''}
+      <div class="grid2"><button class="btn" data-act="foul:${p.id}">Foul +1</button><button class="btn" data-act="foulm:${p.id}" ${st(p.id).fouls?'':'disabled'}>Foul −1</button></div>
+      ${S.started?`<div class="muted small" style="margin-top:4px">Minutes played <b>${mmss(played(p.id))}</b> — fix if he was on (or off) longer than the app thinks</div>
+      <div class="grid4"><button class="btn" data-act="mins:${p.id}:-60">−1:00</button><button class="btn" data-act="mins:${p.id}:-30">−0:30</button><button class="btn" data-act="mins:${p.id}:30">+0:30</button><button class="btn" data-act="mins:${p.id}:60">+1:00</button></div>`:''}
+      <button class="btn ${p.active?'danger':''}" data-act="active:${p.id}">${p.active?'Injured / unavailable':'Back available'}</button>
+      <button class="btn ghost" data-act="close">Close</button></div>`;
+  }else if(ui.sheet==='hot'){
+    const h0=ui.hotConfirm;
+    h=`<h2>🔥 #${P(h0.id).num} is hot</h2><p>Borrow <b>${mt(h0.got)} min</b> from ${Object.entries(h0.deb).map(([id,m])=>'#'+P(id).num+' ('+mt(m)+')').join(', ')}? Nobody drops below ${S.config.devFloorMins} min.</p>
+    <div class="stack"><button class="btn pri" data-act="hotyes">Borrow ${mt(h0.got)} min</button><button class="btn" data-act="hotno">Just defer his rest</button><button class="btn ghost" data-act="close">Cancel</button></div>`;
+  }else if(ui.sheet==='break'){
+    const last=S.period>=S.periods.length,early=S.clockSeconds>0,n=nextPlanned();
+    if(early){h=`<h2>End ${qLabel(S.period)} now?</h2><p class="muted">The app clock still shows ${mmss(S.clockSeconds)}. Use this if the table clock has hit zero.</p>
+      <div class="stack"><button class="btn pri" data-act="endnow">End ${qLabel(S.period)}</button><button class="btn ghost" data-act="close">Keep playing</button></div>`}
+    else if(!last){
+      h=`<h2>${qLabel(S.period)} done</h2>${S.period===2?halfTimeCard():''}${scoreLine()?`<p><b>${esc(scoreLine())}</b> <span class="muted small">· ${qLabel(S.period)} ${scoreByQ()[S.period-1].us}–${scoreByQ()[S.period-1].them}</span> <button class="btn sm" data-act="sheet:score">Edit score</button></p>`:`<p><button class="btn sm" data-act="sheet:score">Log the score</button></p>`}${n&&n.ins.length&&n.b.p===S.period+1&&n.b.s===0?`<p>Plan for the start of ${qLabel(S.period+1)}:</p><div class="swaps">${swapRows(n)}</div>`:'<p class="muted">Plan keeps the same five.</p>'}
+      <div class="stack" style="margin-top:10px">${n&&n.ins.length&&n.b.p===S.period+1&&n.b.s===0?'<button class="btn" data-act="qswap">Apply planned lineup ⚡</button>':''}<button class="btn pri" data-act="nextp">Ready for ${qLabel(S.period+1)}</button><button class="btn ghost" data-act="close">Close</button></div>`}
+    else h=`<h2>${qLabel(S.period)} done</h2><p class="muted">${scoreLine()?scoreLine()+'. ':''}Scores level? Add overtime. Otherwise call full time.</p>
+      <div class="stack"><button class="btn" data-act="ot:${S.config.otLengthMins}">+${S.config.otLengthMins} min overtime</button>
+      <button class="btn pri" data-act="fulltime">Full time</button><button class="btn ghost" data-act="close">Close</button></div>`;
+  }else if(ui.sheet==='score'){
+    const ev=S.score.ev.slice(-4).reverse();
+    h=`<h2>${esc(scoreLine()||tn()+' 0 – 0 '+oppName())}</h2>
+    <div class="scgrid"><div class="sccol"><h3>${esc(tn())}</h3><button class="btn big" data-act="sc:us:2">+2</button><button class="btn big" data-act="sc:us:3">+3</button><button class="btn big" data-act="sc:us:1">+1</button><button class="btn" data-act="scm:us" ${S.score.us?'':'disabled'}>−1 correction</button></div>
+    <div class="sccol"><h3>${esc(oppName())}</h3><button class="btn big" data-act="sc:them:2">+2</button><button class="btn big" data-act="sc:them:3">+3</button><button class="btn big" data-act="sc:them:1">+1</button><button class="btn" data-act="scm:them" ${S.score.them?'':'disabled'}>−1 correction</button></div></div>
+    ${ev.length?`<p class="muted small">Last: ${ev.map(e=>(e.side==='us'?esc(tn()):esc(oppName()))+' +'+e.pts+' ('+qLabel(e.p)+' '+mmssShort(e.c)+')').join(' · ')}. Mistake? Undo takes the last one off, or −1 takes a point off.</p>`:'<p class="muted small">Optional. If you log scores, the app spots a run against you and the summary gets a quarter-by-quarter score.</p>'}
+    ${scorerStrip()}
+    <h3>${esc(oppName())} team fouls this quarter: ${tfThem()}</h3><p class="muted small">From their 5th, every foul gives us free throws (FIBA). Ours count automatically: ${tfUs()}.</p>
+    <div class="grid2"><button class="btn" data-act="tft:1">${esc(oppName())} foul +1</button><button class="btn" data-act="tft:-1" ${tfThem()?'':'disabled'}>−1</button></div>
+    <div class="grid2" style="margin-top:8px"><button class="btn" data-act="undo" ${S.undo.length&&['score','scorefix'].includes(S.undo[S.undo.length-1].type)?'':'disabled'}>↩ Undo last score</button><button class="btn pri" data-act="close">Done</button></div>`;
+  }else if(ui.sheet==='to'){
+    const a=toLeft('us'),b=toLeft('them'),l2=toLeftLast2('us');
+    h=`<h2>Timeout</h2><p class="muted">${S.period<=2?'First half: 2 each':S.period<=4?'Second half: 3 each, max 2 in the last 2:00':'Overtime: 1 each'}. The clock pauses.</p>
+    <div class="stack"><button class="btn pri" data-act="to:us" ${a>0&&l2!==0?'':'disabled'}>Our timeout · ${a} left${l2!=null?' ('+Math.min(a,l2)+' in last 2:00)':''}</button>
+    <button class="btn" data-act="to:them" ${b>0&&toLeftLast2('them')!==0?'':'disabled'}>${esc(oppName())} timeout · ${b} left</button>
+    <button class="btn ghost" data-act="close">Cancel</button></div>`;
+  }else if(ui.sheet==='ourto'){
+    const n=timeoutChange();
+    h=`<h2>Timeout — clock paused</h2>
+    <p><b>One offence point, one defence point, one general point.</b> Reset heads, don't teach new.</p>
+    ${n?`<h3>Good moment for the ${blockLabel(n.b).split('–')[0]} change</h3><div class="swaps">${swapRows(n)}</div><div class="stack" style="margin-top:8px"><button class="btn pri" data-act="qswap">Quick swap ⚡ now</button></div>`:''}
+    <button class="btn ghost" style="width:100%;margin-top:8px" data-act="close">Back to the game</button>`;
+  }else if(ui.sheet==='import'){
+    h=`<h2>Add a past game</h2><p class="muted small">Paste the CSV or WhatsApp summary this app made for that game.</p>
+    <textarea id="impText" placeholder="Paste here" style="min-height:140px"></textarea>
+    <div class="grid2" style="margin-top:8px"><input id="impDate" type="text" placeholder="Date (dd/mm/yyyy)" class="inp"><input id="impOpp" type="text" placeholder="Opponent" class="inp"></div>
+    <div class="grid2" style="margin-top:8px"><input id="impUs" type="number" inputmode="numeric" placeholder="Our score" class="inp"><input id="impThem" type="number" inputmode="numeric" placeholder="Their score" class="inp"></div>
+    <div class="stack" style="margin-top:8px"><button class="btn pri" data-act="impgo">Add to season</button><button class="btn ghost" data-act="close">Cancel</button></div>`;
+  }else if(ui.sheet==='season'){
+    const se=seasonLoad();
+    h=`<h2>Season games</h2><div class="stack">${se.games.map(g=>`<div class="lcrow"><span class="lcl">${esc(g.date)}${g.opp?' vs '+esc(g.opp):''}${g.scored?' · '+g.us+'–'+g.them:''}${g.imported?' <span class="muted small">(added)</span>':''}</span><button class="btn sm danger" data-act="sgdel:${g.id}">Remove</button></div>`).join('')||'<p class="muted">No games yet.</p>'}</div>
+    ${se.games.length?'<button class="btn danger" style="width:100%;margin-top:10px" data-act="sgclear">Clear the whole season</button>':''}
+    <button class="btn ghost" style="width:100%;margin-top:8px" data-act="close">Close</button>`;
+  }else if(ui.sheet==='sgclear'){
+    h=`<h2>Clear the season?</h2><p class="muted">Removes every saved game from this phone. Copy the season CSV first if you want a record.</p><div class="stack"><button class="btn danger" data-act="sgclearyes">Yes, clear it</button><button class="btn ghost" data-act="close">Cancel</button></div>`;
+  }else if(ui.sheet==='resync'){
+    h=`<h2>Resync to table clock</h2><div class="clock stop"><div class="digits">${mmss(S.clockSeconds)}</div><div class="state">${qLabel(S.period)}</div></div>
+    <div class="grid4" style="margin-top:10px"><button class="btn" data-act="rs:-60">−1:00</button><button class="btn" data-act="rs:-10">−0:10</button><button class="btn" data-act="rs:10">+0:10</button><button class="btn" data-act="rs:60">+1:00</button></div>
+    <div class="grid2" style="margin-top:8px"><input id="rsv" type="text" inputmode="numeric" placeholder="mm:ss" style="min-height:48px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:0 12px"><button class="btn" data-act="rsset">Set</button></div>
+    <p class="note">The five on court now get the same change to their minutes (−1:00 on the clock = +1:00 played). It assumes the same five were on while the clocks drifted apart.</p>
+    <button class="btn pri" style="width:100%;margin-top:8px" data-act="close">Done</button>`;
+  }else if(ui.sheet==='block'){
+    const B=blocksAll(),b=B.find(x=>x.key===ui.sheetId),now=elapsedAbs();
+    if(!b){ui.sheet=null;el.innerHTML='';return}
+    const future=b.abs0>now||(!S.started&&b.abs0===0),lock=inLockBlock(b)&&!S.pinned[b.key];
+    const av=availList().slice().sort((x,y)=>x.tier-y.tier||x.num-y.num),need=Math.min(5,av.length);
+    if(!ui.draft)ui.draft=(S.plan[b.key]||[]).slice();
+    const dr=ui.draft,core=dr.filter(id=>tierOf(id)<=2).length;
+    const playerBtns=av.map(p=>`<button class="tog pick ${dr.includes(p.id)?'on':''}" data-act="draft:${p.id}" aria-pressed="${dr.includes(p.id)}" ${future?'':'disabled'}>#${p.num} ${esc(p.name)} <span class="tier t${p.tier}">T${p.tier}</span></button>`).join('');
+    const clockAt=x=>mmssShort(S.periods[b.p-1]-x);
+    const mv=b.movable&&future?`<h3>When this change happens</h3><div class="grid2"><button class="btn" data-act="mv:${b.key}:-30">Earlier → ${clockAt(Math.max(0,b.s-30))}</button><button class="btn" data-act="mv:${b.key}:30">Later → ${clockAt(b.s+30)}</button></div>${S.moves[b.key]?`<button class="btn ghost" style="width:100%;margin-top:6px" data-act="mv:${b.key}:${-S.moves[b.key]}">Back to ${clockAt(b.orig)}</button>`:''}`:'';
+    h=`<h2>${S.pinned[b.key]?'📌 ':''}${blockLabel(b)}</h2>
+    ${!future?'<p class="muted">This block has started, so it can’t be changed here. Use subs on the Live tab.</p>':lock?'<p class="muted">This is the closers block. Change your closers on Setup, or lock a different five here.</p>':''}
+    <div class="picks">${playerBtns}</div>
+    <p class="${dr.length===need?'muted':'lowcore'} small">${dr.length} of ${need} picked${core<S.config.strongFloor?` · only ${core} core player${core===1?'':'s'} (floor is ${S.config.strongFloor})`:''}</p>
+    ${future?`<div class="stack"><button class="btn pri" data-act="pin:${b.key}" ${dr.length===need?'':'disabled'}>Lock this lineup</button>${S.pinned[b.key]?`<button class="btn" data-act="unpin:${b.key}">Unlock — let the planner choose</button>`:''}</div>`:''}
+    ${mv}
+    <button class="btn ghost" style="width:100%;margin-top:8px" data-act="close">Close</button>`;
+  }else if(ui.sheet==='copy'){
+    h=`<h2>Copy the ${esc((ui.copyLabel||'text').toLowerCase())}</h2>
+    <p class="muted small">This phone blocked copying from the app. The text is selected below: tap and hold it, then choose <b>Copy</b> (or <b>Select All</b> first).</p>
+    <textarea id="copyArea" readonly style="min-height:40vh;font-size:16px">${esc(ui.copyText||'')}</textarea>
+    <div class="grid2" style="margin-top:8px"><button class="btn" data-act="copysel">Select all</button><button class="btn pri" data-act="close">Done</button></div>`;
+  }else if(ui.sheet==='factory'){
+    h=`<h2>Reset everything?</h2><p class="muted">Clears this match and puts the squad, tiers, starters, closers, tier minutes and rules back to the original defaults. Names or players you've added will be lost.</p>
+    <div class="stack"><button class="btn danger" data-act="factory">Yes, reset everything</button><button class="btn ghost" data-act="close">Cancel</button></div>`;
+  }else if(ui.sheet==='early'){
+    const n=nextPlanned();
+    h=n?`<h2>Make this change early?</h2><p>It's planned for <b>${blockLabel(n.b).split('–')[0]}</b>, <b>${mmssShort(n.inSec)}</b> from now.</p><div class="swaps">${swapRows(n)}</div>
+    <p class="muted small">If you go ahead, the rest of the game is re-planned around it, so the players coming off get their minutes back later.</p>
+    <div class="stack"><button class="btn pri" data-act="qswapgo">Yes, swap now</button><button class="btn ghost" data-act="close">Cancel — keep the plan</button></div>`:'<h2>No planned change</h2><button class="btn ghost" data-act="close">Close</button>';
+  }else if(ui.sheet==='about'){
+    h=`<h2>About ${esc(APP_NAME)}</h2><p class="muted small">Version ${esc(APP_VERSION)}</p>
+    <p><b>Your data stays on your phone.</b> No account, no sign-up, no tracking. Names, minutes and scores are kept only in this browser on this device. Nothing is sent anywhere unless you copy it out yourself (a backup, a summary or a debug log).</p>
+    <p class="muted small">Clearing your browser data or uninstalling deletes it, so use <b>Copy season backup</b> on the Logs tab after each game.</p>
+    ${ABOUT.tip?`<p><a class="btn pri" style="display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none" href="${esc(ABOUT.tip)}" target="_blank" rel="noopener">☕ ${esc(ABOUT.tipLabel||'Buy me a coffee')}</a></p><p class="muted small">Free to use. Tips are optional and help keep it going.</p>`:''}
+    ${ABOUT.contact?`<p class="small">Feedback or a bug? <a href="${esc(ABOUT.contact)}" target="_blank" rel="noopener">Get in touch</a> — a debug log (Logs tab) helps a lot.</p>`:''}
+    ${ABOUT.site?`<p class="small"><a href="${esc(ABOUT.site)}" target="_blank" rel="noopener">Project page &amp; source</a></p>`:''}
+    <p class="muted small">Free software under the MIT licence. Screen-on fallback uses NoSleep.js (MIT). Rules defaults follow Basketball NI / FIBA youth play; check your own league's rules.</p>
+    <div class="stack"><button class="btn ghost" data-act="close">Close</button></div>`;
+  }else if(ui.sheet==='awake'){
+    h=`<h2>Keeping the screen on</h2><p>The app asks your phone to keep the screen on for the whole game. If it says <b>Screen may sleep</b>, tap anywhere in the app once and it tries again.</p>
+    <p class="muted small">If your phone still dims, set it to stay on while you coach: <b>iPhone</b> Settings → Display &amp; Brightness → Auto-Lock → Never. <b>Android</b> Settings → Display → Screen timeout → 10 or 30 minutes. Low Power / Battery Saver mode can also stop it, so turn that off for the game.</p>
+    <div class="stack"><button class="btn pri" data-act="awaketry">Try again now</button><button class="btn ghost" data-act="close">Close</button></div>`;
+  }else if(ui.sheet==='restore'){
+    h=`<h2>Restore from a backup</h2><p class="muted small">Paste the text that starts <b>PUMAS-BACKUP-1:</b>. Games already on this phone are kept; missing ones are added.</p>
+    <textarea id="rsText" placeholder="PUMAS-BACKUP-1:…" style="min-height:120px"></textarea>
+    <div class="stack" style="margin-top:8px"><button class="btn pri" data-act="rsgo:0">Add the games</button><button class="btn" data-act="rsgo:1" ${S.started?'disabled':''}>Add the games + restore squad &amp; settings${S.started?' (after this game)':''}</button><button class="btn ghost" data-act="close">Cancel</button></div>`;
+  }else if(ui.sheet==='gameday'){
+    const rows=S.roster.slice().sort((a,b)=>a.tier-b.tier||a.num-b.num),nS=S.roster.filter(p=>p.starter&&p.active).length,nA=availList().length;
+    h=`<h2>Game-day setup</h2>
+    <div class="grid2"><input class="inp" type="text" data-chg="opp" value="${esc(S.match.opp)}" placeholder="Opponent"><input class="inp" type="text" data-chg="date" value="${esc(S.match.date)}"></div>
+    <div class="seg" style="margin-top:8px"><button data-act="practice:0" aria-pressed="${!S.match.practice}">Game</button><button data-act="practice:1" aria-pressed="${!!S.match.practice}">Practice</button></div>
+    <p class="small" style="margin:10px 0 4px"><b>Who's here?</b> Tap to mark in or out · <b>S</b> = starter <span class="chip ${nS===5?'go':'warn'}">Starters ${nS}/5</span> <span class="chip acc">${nA} here</span></p>
+    <div class="gdl">${rows.map(p=>`<div class="gdr ${p.active?'':'off'}"><button class="btn gdh" data-act="gdhere:${p.id}" aria-pressed="${p.active}">${p.active?'✓':'✕'} <b>#${p.num}</b> ${esc(p.name)} <span class="tier t${p.tier}">T${p.tier}</span></button><button class="tog c" data-act="gdstart:${p.id}" aria-pressed="${!!p.starter&&p.active}" ${p.active?'':'disabled'}>S</button></div>`).join('')}</div>
+    ${S.started?'<p class="note">The game has started: marking someone out now counts as an injury (his minutes so far are kept).</p>':''}
+    <button class="btn pri" style="width:100%;margin-top:10px" data-act="close">Done${nS===5||S.started?'':' (pick 5 starters)'}</button>`;
+  }else if(ui.sheet==='delp'){
+    const p=P(ui.sheetId);
+    h=p?`<h2>Remove #${p.num} ${esc(p.name)}?</h2><p class="muted">He comes off the squad list for good. His minutes from past games stay in the season table. If he's only missing one game, mark him <b>Out</b> instead.</p>
+    <div class="stack"><button class="btn danger" data-act="delp:${p.id}">Yes, remove him</button><button class="btn ghost" data-act="close">Cancel</button></div>`:'<button class="btn ghost" data-act="close">Close</button>';
+  }else if(ui.sheet==='reset'){
+    h=`<h2>Start a new match?</h2><p class="muted">This wipes the clock, minutes, fouls and logs for the current match. Your squad and settings stay.${S.subLogs.length?' Copy the WhatsApp summary first if you need it.':''}</p>
+    <div class="stack"><button class="btn danger" data-act="reset">Yes, start fresh</button><button class="btn ghost" data-act="close">Cancel</button></div>`;
+  }
+  el.innerHTML=`<div class="scrim" data-act="scrim"><div class="sheet" role="dialog">${h}</div></div>`;
+}
+function resync(delta,abs){
+  if(S.clockRunning)tick();
+  const before=S.clockSeconds;
+  S.clockSeconds=Math.max(0,Math.min(len(),abs!=null?abs:S.clockSeconds+delta));
+  const moved=before-S.clockSeconds;   // + = the table clock had run further than ours: the five on court played that time too
+  if(S.started&&moved)S.onCourtIds.forEach(id=>{const s=st(id);while(s.periodSplit.length<S.period)s.periodSplit.push(0);
+    const d=moved>0?moved:-Math.min(-moved,s.periodSplit[S.period-1]);   // winding back never takes more than he's played this quarter
+    s.playedSeconds+=d;s.periodSplit[S.period-1]+=d;s.consecutiveSeconds=Math.max(0,s.consecutiveSeconds+d)});
+  log(qLabel(S.period)+' — RESYNC '+mmss(before)+' → '+mmss(S.clockSeconds)+(S.started&&moved?' · on-court minutes '+(moved>0?'+':'−')+mmssShort(Math.abs(moved)):''));
+  if(S.started)replan();save();renderSheet();
+}
+
+/* ---------- debug trace: every engine action + what the app believed afterwards ---------- */
+const APP_VERSION='2.17.4 · 2026-10-19';
+let dbgDepth=0;
+function dbgInit(){S.debug={app:APP_VERSION,created:new Date().toISOString(),start:{config:JSON.parse(JSON.stringify(S.config)),roster:JSON.parse(JSON.stringify(S.roster)),closersIds:S.closersIds.slice(),periods:S.periods.slice()},ev:[]}}
+const ids2n=a=>(a||[]).map(id=>{const p=P(id);return p?p.num:id});
+function dbgSnap(){
+  const n=nextPlanned(),lc=liveCalls(),T=targets(),now=elapsedAbs(),plan={},tg={},secs={},fouls={};
+  blocksAll().forEach(b=>{if(b.abs1>now)plan[b.key]=ids2n(S.plan[b.key])});
+  availList().forEach(p=>{tg[p.num]=T[p.id];secs[p.num]=Math.round(played(p.id))});
+  S.roster.forEach(p=>{if(st(p.id).fouls)fouls[p.num]=st(p.id).fouls});
+  return {court:ids2n(S.onCourtIds),next:n?{blk:n.b.key,in:ids2n(n.ins),out:ids2n(n.outs),overdue:!!n.overdue}:null,
+    lock:lc.lock,prompt:lc.show,hot:S.roster.filter(p=>p.hot).map(p=>p.num),cold:S.roster.filter(p=>p.cold).map(p=>p.num),
+    tg,secs,fouls,plan,adj:JSON.parse(JSON.stringify(S.adj)),applied:Object.keys(S.applied),fixed:Object.keys(S.fixed),halves:Object.keys(S.halves||{}),pinned:Object.keys(S.pinned||{}),moves:{...(S.moves||{})},score:[S.score.us,S.score.them],tos:S.tos.length,tf:[tfUs(),tfThem()],status:n?n.status:null};
+}
+function dbg(a,x,pre){
+  try{
+    if(!S.debug)dbgInit();
+    const ev=S.debug.ev;if(ev.length>=3000)ev.splice(0,500);
+    let r;try{r=dbgSnap()}catch(e){r={err:String(e&&e.stack||e)}}
+    pre=pre||{p:S.period,c:S.clockSeconds,run:S.clockRunning};
+    ev.push({i:ev.length?ev[ev.length-1].i+1:0,w:Date.now(),p:pre.p,c:Math.round(pre.c*10)/10,run:pre.run,a,x:x||[],r});
+  }catch(e){}
+}
+function traced(name,fn){return function(...args){
+  const pre={p:S.period,c:S.clockSeconds,run:S.clockRunning};
+  if(dbgDepth===0&&name==='quickSwap'){const n=nextPlanned();pre.saw=n?{blk:n.b.key,in:n.ins.slice(),out:n.outs.slice(),overdue:!!n.overdue}:null}
+  dbgDepth++;let out;try{out=fn.apply(this,args)}finally{dbgDepth--}
+  if(dbgDepth===0)dbg(name,pre.saw?[pre.saw]:args,pre);
+  return out}}
+doSub=traced('doSub',doSub);quickSwap=traced('quickSwap',quickSwap);skipPlanned=traced('skipPlanned',skipPlanned);
+addFoul=traced('addFoul',addFoul);undoFoul=traced('undoFoul',undoFoul);undo=traced('undo',undo);
+startClock=traced('startClock',startClock);pauseClock=traced('pauseClock',pauseClock);resync=traced('resync',resync);
+setActive=traced('setActive',setActive);setHot=traced('setHot',setHot);confirmHot=traced('confirmHot',confirmHot);setCold=traced('setCold',setCold);
+startNextPeriod=traced('startNextPeriod',startNextPeriod);pinBlock=traced('pinBlock',pinBlock);addScore=traced('addScore',addScore);callTimeout=traced('callTimeout',callTimeout);importGame=traced('importGame',importGame);unpinBlock=traced('unpinBlock',unpinBlock);moveBoundary=traced('moveBoundary',moveBoundary);adjMins=traced('adjMins',adjMins);addTeamFoulThem=traced('addTeamFoulThem',addTeamFoulThem);scoreMinus=traced('scoreMinus',scoreMinus);setScorer=traced('setScorer',setScorer);addOT=traced('addOT',addOT);endPeriodEarly=traced('endPeriodEarly',endPeriodEarly);fullTime=traced('fullTime',fullTime);
+// Compact trace (pumas-debug-2): each event keeps only what changed since the one before, then the whole thing is
+// gzipped and base64'd so a full game fits a phone clipboard / chat paste. Long traces are split into parts.
+const TRACE_PART_CHARS=12000;
+function debugPayload(){
+  const {debug,undo,...rest}=S,ev=[];let prev={};
+  (debug?debug.ev:[]).forEach(e=>{
+    const r=e.r||{},d={};
+    for(const k in r){
+      if(k==='plan'&&r.plan&&typeof r.plan==='object'){const pd={},pp=prev.plan||{};
+        for(const bk in r.plan)if(JSON.stringify(r.plan[bk])!==JSON.stringify(pp[bk]))pd[bk]=r.plan[bk];
+        for(const bk in pp)if(!(bk in r.plan))pd[bk]=null;
+        if(Object.keys(pd).length)d.plan=pd;}
+      else if(JSON.stringify(r[k])!==JSON.stringify(prev[k]))d[k]=r[k];
+    }
+    ev.push({...e,r:d});prev=r;
+  });
+  return {format:'pumas-debug-2',app:APP_VERSION,exported:new Date().toISOString(),ua:(navigator&&navigator.userAgent)||'',start:debug&&debug.start,ev,final:rest};
+}
+async function debugExportCompact(){
+  const json=JSON.stringify(debugPayload());
+  try{
+    if(typeof CompressionStream==='undefined')throw 0;
+    const cs=new CompressionStream('gzip'),w=cs.writable.getWriter();w.write(new TextEncoder().encode(json));w.close();
+    const bytes=new Uint8Array(await new Response(cs.readable).arrayBuffer());let bin='';
+    for(let i=0;i<bytes.length;i+=0x8000)bin+=String.fromCharCode.apply(null,bytes.subarray(i,i+0x8000));
+    return 'PUMAS-TRACE-2:'+btoa(bin);
+  }catch(e){return json}
+}
+function traceParts(str){if(str.length<=TRACE_PART_CHARS)return [str];const n=Math.ceil(str.length/TRACE_PART_CHARS),out=[];
+  for(let i=0;i<n;i++)out.push('PUMAS-PART '+(i+1)+'/'+n+':'+str.slice(i*TRACE_PART_CHARS,(i+1)*TRACE_PART_CHARS));return out}
+function prepareTrace(){
+  const n=S.debug?S.debug.ev.length:0;
+  if(ui.trace&&ui.trace.n===n&&ui.trace.id===S.match.id)return;
+  const id=S.match.id;ui.trace={n,id,parts:null};
+  debugExportCompact().then(str=>{if(!ui.trace||ui.trace.n!==n||ui.trace.id!==id)return;ui.trace.parts=traceParts(str);ui.trace.size=str.length;if(ui.tab==='logs')renderTraceBox()});
+}
+function renderTraceBox(){
+  const box=document.getElementById('dbgbox');if(!box)return;const t=ui.trace;
+  if(!t||!t.parts){box.innerHTML='<p class="note">Preparing the trace…</p>';return}
+  const k=Math.max(1,Math.round(t.size/1024));
+  box.innerHTML=`<p class="note">${t.n} engine events, packed into ${k} KB${t.parts.length>1?` — in ${t.parts.length} parts so nothing gets cut off. Copy and paste each part (in any order)`:''}. Paste it into a chat with Claude to replay the game step by step.</p>
+    <div class="pbtns">${t.parts.map((_,i)=>`<button class="btn" data-act="copy:dbgpart${i+1}">${t.parts.length>1?'Copy part '+(i+1)+' of '+t.parts.length:'Copy debug trace'}</button>`).join('')}</div>
+    ${t.parts.map((p,i)=>`<textarea id="dbgpart${i+1}" readonly style="position:absolute;left:-9999px;width:1px;height:1px">${esc(p)}</textarea>`).join('')}`;
+}
+function debugExport(){const {debug,...rest}=S;return JSON.stringify({format:'pumas-debug-1',app:APP_VERSION,exported:new Date().toISOString(),ua:(navigator&&navigator.userAgent)||'',start:debug&&debug.start,ev:debug?debug.ev:[],final:rest})}
+window.addEventListener&&window.addEventListener('error',e=>dbg('error',[String(e.message),e.lineno||0]));
+
+/* ---------- events ---------- */
+function act(a,e){
+  const [k,id,v]=a.split(':');
+  switch(k){
+    case 'tab':ui.tab=id;ui.pendingOut=null;render();window.scrollTo(0,0);break;
+    case 'clock':if(S.finished)break;if(!S.started||S.clockSeconds>0)toggleClock();else openBreak(),render();break;
+    case 'resync':ui.sheet='resync';renderSheet();break;
+    case 'out':ui.pendingOut=ui.pendingOut===id?null:id;render();break;
+    case 'in':
+      if(S.finished)break;
+      if(ui.pendingOut)doSub(ui.pendingOut,id);
+      else if(S.onCourtIds.length<5)doSub(null,id);
+      else toast('Tap OUT on a court player first');break;
+    case 'foul':addFoul(id,1);if(ui.sheet==='menu'){ui.sheet=null;render()}break;
+    case 'foulm':addFoul(id,-1);ui.sheet=null;render();break;
+    case 'menu':ui.sheet='menu';ui.sheetId=id;renderSheet();break;
+    case 'hot':ui.sheet=null;setHot(id);render();break;
+    case 'cold':ui.sheet=null;setCold(id);render();break;
+    case 'hotyes':confirmHot(true);break;
+    case 'hotno':confirmHot(false);break;
+    case 'qswap':quickSwap();if(ui.sheet==='break')renderSheet();break;
+    case 'qswapgo':quickSwap(true);renderSheet();break;
+    case 'undo':undo();if(ui.sheet==='score')renderSheet();break;
+    case 'foulundo':undoFoul(id);break;
+    case 'skipplan':skipPlanned();break;
+    case 'sheet':ui.sheet=id==='to'?'to':id;renderSheet();break;
+    case 'fdsub':doSub(id,v);break;
+    case 'fdkeep':S.foulAck[id]=4;log(clockLabel()+' — '+tag(id)+' kept on with 4 fouls');save();render();break;
+    case 'sc':addScore(id,+v);if(ui.sheet==='score')renderSheet();break;
+    case 'to':callTimeout(id);break;
+    case 'archive':archiveGame();render();toast('Saved to the season');break;
+    case 'practice':S.match.practice=id==='1';save();render();break;
+    case 'glance':ui.glance=id==='1';render();break;
+    case 'awaketry':ui.sheet=null;requestWake().then(()=>{renderSheet();render();toast(ui.awake!=='none'?'Screen will stay on':'Your phone said no — use the settings tip')});break;
+    case 'gsc':addScore(id,+v);break;
+    case 'scm':scoreMinus(id);if(ui.sheet==='score')renderSheet();break;
+    case 'scorer':if(id==='-'){ui.askScorer=null;render()}else setScorer(id);if(ui.sheet==='score')renderSheet();break;
+    case 'askdel':ui.sheet='delp';ui.sheetId=id;renderSheet();break;
+    case 'rsgo':{const r=restoreBackup(($('#rsText')||{}).value,id==='1');if(!r){toast('That isn’t a backup from this app — copy it again from Logs → Season');break}ui.sheet=null;render();toast('Backup restored · '+r.added+' game'+(r.added===1?'':'s')+' added'+(r.squad?' · squad & settings restored':''));break}
+    case 'gdhere':{const p=P(id);if(p){setActive(id,!p.active);if(!p.active)p.starter=false;ui.sheet='gameday';render()}break}
+    case 'gdstart':{const p=P(id);if(p){p.starter=!p.starter;if(!S.started)replan();save();render()}break}
+    case 'print':openPrint();break;
+    case 'printclose':closePrint();break;
+    case 'printgo':try{window.print()}catch(e){toast('Printing is blocked here — use the installed app, or take a screenshot')}break;
+    case 'bh':{const p=P(id);if(p){p.bh=!p.bh;dbg('setup:bh',[id,p.bh]);replan();save();render()}break}
+    case 'delp':dbg('setup:del',[id]);removePlayer(id);ui.sheet=null;renderSheet();break;
+    case 'mins':adjMins(id,+v);renderSheet();break;
+    case 'tft':addTeamFoulThem(+id);renderSheet();break;
+    case 'impgo':{const n=importGame(($('#impText')||{}).value,($('#impDate')||{}).value,($('#impOpp')||{}).value,($('#impUs')||{}).value,($('#impThem')||{}).value);if(!n){toast('Couldn’t read that — paste the CSV or WhatsApp summary from this app');break}ui.sheet=null;render();toast('Added '+n+' players to the season');break}
+    case 'sgdel':removeSeasonGame(id);renderSheet();break;
+    case 'sgclear':ui.sheet='sgclear';renderSheet();break;
+    case 'sgclearyes':clearSeason();ui.sheet=null;render();toast('Season cleared');break;
+    case 'blk':ui.sheet='block';ui.sheetId=a.slice(4);ui.draft=null;renderSheet();break;
+    case 'draft':{const d=ui.draft||[],i=d.indexOf(id);if(i>=0)d.splice(i,1);else if(d.length<Math.min(5,availList().length))d.push(id);else{toast('Five picked — tap one to drop him first');break}ui.draft=d;renderSheet();break}
+    case 'pin':{const key=a.slice(4);pinBlock(key,ui.draft||[]);ui.sheet=null;ui.draft=null;render();toast('Lineup locked');break}
+    case 'unpin':{const key=a.slice(6);unpinBlock(key);ui.draft=null;renderSheet();break}
+    case 'mv':{const parts=a.split(':');moveBoundary(parts[1],+parts[2]);renderSheet();break}
+    case 'tm':{const c=S.config.tierMins;c[id]=Math.max(0,Math.min(32,(+c[id]||0)+(+v)));replan();save();render();break}
+    case 'break':openBreak();render();break;
+    case 'endnow':endPeriodEarly();break;
+    case 'nextp':startNextPeriod();break;
+    case 'ot':addOT(+id);break;
+    case 'fulltime':fullTime();break;
+    case 'rs':resync(+id);break;
+    case 'rsset':{const m=($('#rsv').value||'').match(/^(\d{1,2}):?(\d{2})$/);if(!m){toast('Type the time like 4:35');break}resync(0,(+m[1])*60+(+m[2]));break}
+    case 'close':ui.sheet=null;ui.hotConfirm=null;ui.draft=null;render();break;
+    case 'scrim':if(e.target.classList.contains('scrim')){ui.sheet=null;ui.hotConfirm=null;render()}break;
+    case 'active':ui.sheet=null;setActive(id,!P(id).active);break;
+    case 'starter':{const p=P(id);p.starter=!p.starter;if(!S.started)replan();save();render();break}
+    case 'closer':{const i=S.closersIds.indexOf(id);if(i>=0)S.closersIds.splice(i,1);else{if(S.closersIds.length>=5){toast('Five closers already — remove one first');break}S.closersIds.push(id)}replan();save();render();break}
+    case 'cfg':{let val=v==='true'?true:v==='false'?false:isNaN(+v)?v:+v;
+      if(id==='quarterMins'){
+        if(S.started){toast('Quarter length can’t change once the game has started');break}
+        S.config.quarterMins=val;S.periods=Array(4).fill(val*60);S.period=1;S.clockSeconds=val*60;S.plan={};S.fixed={};S.applied={};S.halves={};S.pinned={};S.moves={};
+        replan();save();render();toast(val+'-minute quarters · '+(val*4)+' minutes a game');break}
+      S.config[id]=val;replan();save();render();break}
+    case 'addplayer':{let n=1;while(S.roster.some(p=>p.num===n))n++;const pid='x'+Date.now();S.roster.push({id:pid,num:n,name:'New player',tier:4,active:true,hot:false,cold:false,starter:false});st(pid);replan();save();render();break}
+    case 'askreset':ui.sheet='reset';renderSheet();break;
+    case 'askfactory':ui.sheet='factory';renderSheet();break;
+    case 'factory':S=freshMatch();dbgInit();ui.sheet=null;ui.tab='setup';ui.pendingOut=null;replan();save();render();toast('Everything reset to defaults');break;
+    case 'sec':secToggle(id);render();break;
+    case 'tmreset':S.config.tierMins={...DEF_CFG.tierMins};replan();save();render();toast('Tier minutes back to 20 / 15 / 10 / 6');break;
+    case 'reset':S=freshMatch(S);dbgInit();S.config.tierMins={...S.config.tierMins};ui.sheet=null;ui.tab='live';ui.pendingOut=null;releaseWake();replan();save();render();toast('New match ready — tap the clock to tip off');break;
+    case 'copy':copyText(id);break;
+    case 'copysel':{const t=document.getElementById('copyArea');if(t){t.focus();t.setSelectionRange(0,t.value.length);if(execCopy(t.value)){toast((ui.copyLabel||'Text')+' copied')}}break}
+  }
+  if(['cfg','tm','tmreset','starter','closer','addplayer','practice'].includes(k))dbg('setup:'+k,[id,v]);
+}
+document.addEventListener('click',e=>{
+  if(!e.target.closest('#toast [data-act]'))hideToast();
+  if(Date.now()-ui.lpUp<450){e.preventDefault();return}
+  const t=e.target.closest('[data-act]');if(!t)return;
+  if(t.disabled)return;act(t.dataset.act,e);
+  if(wantAwake()&&(ui.awake==='none'||(ui.awake==='lock'&&!wakeLock)))requestWake();
+});
+document.addEventListener('change',e=>{
+  const c=e.target.dataset.chg;if(!c)return;const [k,id]=c.split(':'),v=e.target.value;
+  if(k==='opp')S.match.opp=v;else if(k==='date')S.match.date=v;
+  else if(k==='cfgtxt'&&(id==='teamName'||id==='teamFull'))S.config[id]=v.slice(0,40);
+  else if(k==='name')P(id).name=v.trim()||P(id).name;
+  else if(k==='num'){const n=parseInt(v,10);if(n>=0)P(id).num=n}
+  else if(k==='tier'){P(id).tier=+v;if(S.started)log(clockLabel()+' — RE-PLAN: '+tag(id)+' moved to T'+v,'rp');replan()}
+  dbg('setup:'+k,[id,v]);save();if(k==='tier')render();
+});
+let lpTimer=null,lpStart=null;
+document.addEventListener('pointerdown',e=>{
+  const t=e.target.closest('[data-lp]');if(!t)return;const bt=e.target.closest('button');if(bt&&bt!==t)return;
+  lpStart=[e.clientX,e.clientY];
+  lpTimer=setTimeout(()=>{ui.lpFired=true;const a=t.dataset.lp;const [k2,i2]=a.split(':');if(k2==='foulm'){if(st(i2).fouls>0)undoFoul(i2)}else{if(k2==='resync'){ui.sheet='resync'}else{ui.sheet='menu';ui.sheetId=i2}renderSheet()}if(navigator.vibrate)try{navigator.vibrate(20)}catch(_){}},550);
+});
+const lpCancel=e=>{clearTimeout(lpTimer);lpTimer=null;if(ui.lpFired){ui.lpFired=false;ui.lpUp=Date.now()}};
+document.addEventListener('pointerup',lpCancel);document.addEventListener('pointercancel',lpCancel);
+document.addEventListener('pointermove',e=>{if(lpTimer&&lpStart&&Math.hypot(e.clientX-lpStart[0],e.clientY-lpStart[1])>10)lpCancel()});
+document.addEventListener('contextmenu',e=>{if(e.target.closest('[data-lp]'))e.preventDefault()});
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible'){tick();if(ui.awake==='video')ui.awake='none';requestWake();render()}
+  else save();
+});
+
+let lastSec=-1,lastNudge=false;
+setInterval(()=>{
+  const moved=tick();
+  alertTick();
+  if(ui.tab!=='live'||ui.sheet)return;
+  const sec=Math.ceil(S.clockSeconds),nudge=!S.clockRunning&&S.pausedAt&&Date.now()-S.pausedAt>10000;
+  if(ui.askScorer&&!askLive()){ui.askScorer=null;render();return}
+  if((moved&&sec!==lastSec)||nudge!==lastNudge){lastSec=sec;lastNudge=nudge;render()}
+},250);
+
+if(!S.debug)dbgInit();dbg('load',[APP_VERSION]);
+replan();save();render();
+</script>
+
+<script>
+// offline support: cache the app the first time it opens
+if ('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+</script>
+</body>
+</html>
