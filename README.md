@@ -2,7 +2,7 @@
 
 Fair minutes and subs for youth basketball coaches. A free phone web app for youth basketball coaches: it plans who plays when so every player gets fair minutes, tells you when to sub, and tracks score, fouls and timeouts during the game.
 
-**Open it:** https://<your-username>.github.io/<repo-name>/
+**Open it:** https://kramkroc.github.io/rotation-station/
 **iPhone:** open in Safari → Share → *Add to Home Screen*. **Android:** open in Chrome → ⋮ → *Install app*.
 Open it once with signal; after that it works offline.
 
