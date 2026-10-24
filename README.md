@@ -1,4 +1,4 @@
-# Rotation Station (2.17.4 · 2026-10-19)
+# Rotation Station (2.18.0 · 2026-10-22)
 
 Fair minutes and subs for youth basketball coaches. A free phone web app for youth basketball coaches: it plans who plays when so every player gets fair minutes, tells you when to sub, and tracks score, fouls and timeouts during the game.
 

@@ -318,7 +318,7 @@ const SEED_STARTERS=[4,5,6,7,8],SEED_CLOSERS=[4,5,6,7,8],SEED_BH=[4,5,8,13],SEED
 const TEAM_DEFAULT={teamName:"Us",teamFull:"My Team U16"};
 const APP_NAME="Rotation Station",ABOUT={tip:"https://ko-fi.com/rotationstation",tipLabel:"Buy me a coffee",contact:"",site:"https://kramkroc.github.io/rotation-station/"};
 /*SEED-END*/
-const DEF_CFG={tierMins:{1:20,2:15,3:10,4:6},quarterMins:8,shiftLength:4,strongFloor:3,closerLockSeconds:240,otLengthMins:4,lockOT:true,hotBonusMode:false,hotBonusMins:3,devFloorMins:4,coldTrimMins:2,miniSubs:1,readySecs:60,onTimeSecs:45,restMaxMins:8,foulAware:'gentle',spreadLow:true,t1Floor:2,catchUp:2,haptics:'strong',flash:true,maxSubs:3,maxSubsBreaks:true,bhFloor:1,...TEAM_DEFAULT};
+const DEF_CFG={tierMins:{1:20,2:15,3:10,4:6},quarterMins:8,shiftLength:4,strongFloor:3,closerLockSeconds:240,otLengthMins:4,lockOT:true,hotBonusMode:false,hotBonusMins:3,devFloorMins:4,coldTrimMins:2,miniSubs:1,readySecs:60,onTimeSecs:45,restMaxMins:8,foulAware:'gentle',spreadLow:true,t1Floor:2,catchUp:2,haptics:'strong',flash:true,maxSubs:3,maxSubsBreaks:true,bhFloor:1,sound:'auto',...TEAM_DEFAULT};
 const today=()=>{const d=new Date();return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear()};
 const blankStat=()=>({playedSeconds:0,periodSplit:[],fouls:0,consecutiveSeconds:0,fouledOut:false});
 
@@ -747,7 +747,24 @@ function clockNudge(){if(!S.finished&&!S.clockRunning&&S.clockSeconds>=len()-0.5
 /* ---------- attention: vibration + screen flash, checked every quarter-second whatever screen is open ---------- */
 const VIB={strong:{run:[300,100,300,100,300],ready:[250],now:[400,150,400,150,400],overdue:[600,200,600],foul4:[120,80,120,80,120,80,120],qend:[900],nudge:[200,100,200]},
   light:{run:[90,60,90,60,90],ready:[60],now:[90,60,90],overdue:[90,60,90],foul4:[60,40,60,40,60],qend:[200],nudge:[60,40,60]}};
-function buzz(kind){const m=S.config.haptics||'strong';if(m==='off')return;const p=(VIB[m]||VIB.strong)[kind];if(!p)return;try{navigator.vibrate&&navigator.vibrate(p)}catch(_){}}
+function buzz(kind){beep(kind);const m=S.config.haptics||'strong';if(m==='off')return;const p=(VIB[m]||VIB.strong)[kind];if(!p)return;try{navigator.vibrate&&navigator.vibrate(p)}catch(_){}}
+// Sound alerts: for devices that can't vibrate (every iPhone/iPad web app, most tablets). Same moments as the buzz.
+let actx=null;
+const TONES={ready:[[880,.16]],now:[[988,.12],[0,.07],[988,.12],[0,.07],[988,.14]],overdue:[[440,.3],[0,.12],[440,.3]],foul4:[[1175,.08],[0,.06],[1175,.08],[0,.06],[1175,.08],[0,.06],[1175,.08]],run:[[660,.14],[880,.14],[660,.22]],qend:[[523,.25],[392,.45]]};
+function canVibrate(){try{return typeof navigator!=='undefined'&&typeof navigator.vibrate==='function'}catch(_){return false}}
+function soundOn(){const v=S.config.sound||'auto';return v==='on'||(v==='auto'&&!canVibrate())}
+function audioUnlock(){
+  try{if(navigator.audioSession&&navigator.audioSession.type!=='playback')navigator.audioSession.type='playback'}catch(_){}   // iPhone/iPad: play even with the silent switch on
+  try{const C=window.AudioContext||window.webkitAudioContext;if(!C)return false;if(!actx)actx=new C();if(actx.state==='suspended')actx.resume();return true}catch(_){return false}
+}
+function beep(kind,force){
+  if(!force&&!soundOn())return false;const seq=TONES[kind];if(!seq)return false;
+  try{if(!audioUnlock()||!actx)return false;let t=actx.currentTime+0.03;
+    for(const [f,d] of seq){if(f){const o=actx.createOscillator(),g=actx.createGain();o.type='square';o.frequency.value=f;
+      g.gain.setValueAtTime(0.0001,t);g.gain.linearRampToValueAtTime(0.25,t+0.01);g.gain.setValueAtTime(0.25,t+d-0.02);g.gain.linearRampToValueAtTime(0.0001,t+d);
+      o.connect(g);g.connect(actx.destination);o.start(t);o.stop(t+d+0.01)}t+=d}
+    return true}catch(_){return false}
+}
 function alertState(){   // what needs the coach's attention right now, most urgent first
   if(!S.started||S.finished)return null;
   const fd=foulDanger();if(fd)return {kind:'foul4',key:'fd:'+fd.id};
@@ -948,6 +965,28 @@ function restoreBackup(text,squad){
   }
   log('BACKUP restored: '+added+' game'+(added===1?'':'s')+' added'+(squad?(S.started?' (squad not changed: game in progress)':' · squad and settings restored'):''),'rp');save();
   return {added,squad:squad&&!S.started};
+}
+// Setup = squad + team + every setting, without the season: for a second device or an assistant coach
+function setupText(){
+  const o={v:1,kind:'setup',app:APP_VERSION,made:new Date().toISOString(),roster:S.roster.map(p=>({id:p.id,num:p.num,name:p.name,tier:p.tier,active:p.active,starter:!!p.starter,bh:!!p.bh})),config:S.config,closersIds:S.closersIds};
+  return 'PUMAS-SETUP-1:'+btoa(unescape(encodeURIComponent(JSON.stringify(o))));
+}
+function readSetup(text){
+  const m=String(text||'').replace(/\s+/g,'').match(/PUMAS-SETUP-1:([A-Za-z0-9+/=]+)/);if(!m)return null;
+  try{const o=JSON.parse(decodeURIComponent(escape(atob(m[1]))));return o&&o.v===1&&Array.isArray(o.roster)&&o.roster.length&&o.config&&typeof o.config==='object'?o:null}catch(e){return null}
+}
+// replaces this device's squad and settings (never mid-game); a season backup works too, its games are left alone
+function applySetup(text){
+  let o=readSetup(text),fromBackup=false;
+  if(!o){const b=readBackup(text);if(b&&Array.isArray(b.roster)&&b.roster.length){o=b;fromBackup=true}}
+  if(!o)return null;if(S.started)return {err:'started'};
+  const seen=new Set();
+  S.roster=o.roster.filter(p=>p&&p.id!=null&&!seen.has(String(p.id))&&seen.add(String(p.id))).map(p=>({id:String(p.id),num:Math.max(0,parseInt(p.num,10)||0),name:String(p.name||'').slice(0,40)||('#'+p.num),tier:[1,2,3,4].includes(+p.tier)?+p.tier:2,active:p.active!==false,starter:!!p.starter,bh:!!p.bh,hot:false,cold:false}));
+  S.roster.forEach(p=>st(p.id));
+  S.config={...DEF_CFG,...o.config,tierMins:{...DEF_CFG.tierMins,...(o.config||{}).tierMins}};
+  S.closersIds=(o.closersIds||[]).filter(id=>S.roster.some(p=>p.id===id));S.plan={};S.fixed={};S.applied={};S.halves={};S.pinned={};S.moves={};S.adj={};
+  replan();log('SETUP loaded: '+S.roster.length+' players and settings'+(fromBackup?' (from a season backup)':''),'rp');save();
+  return {n:S.roster.length,fromBackup};
 }
 function seasonTable(){
   const se=seasonLoad(),g=se.games;if(!g.length)return null;
@@ -1163,7 +1202,7 @@ function execCopy(text){
 }
 function copyText(id){
   const ta=document.getElementById(id);if(!ta)return;const text=ta.value;
-  const label=/^dbgpart/.test(id)?(ui.trace&&ui.trace.parts&&ui.trace.parts.length>1?'Debug trace part '+id.slice(7):'Debug trace'):({wa:'WhatsApp summary',csv:'CSV',rotcard:'Rotation card',seasoncsv:'Season CSV',backup:'Season backup'}[id]||'Text');
+  const label=/^dbgpart/.test(id)?(ui.trace&&ui.trace.parts&&ui.trace.parts.length>1?'Debug trace part '+id.slice(7):'Debug trace'):({wa:'WhatsApp summary',csv:'CSV',rotcard:'Rotation card',seasoncsv:'Season CSV',backup:'Season backup',setup:'Setup'}[id]||'Text');
   if(execCopy(text)){toast(label+' copied');return}
   const sheet=()=>{ui.sheet='copy';ui.copyText=text;ui.copyLabel=label;renderSheet();
     setTimeout(()=>{const t=document.getElementById('copyArea');if(t){t.focus();t.setSelectionRange(0,t.value.length)}},60)};
@@ -1453,12 +1492,16 @@ function viewSetup(){
     <div class="field"><label>Cold trim</label>${seg('coldTrimMins',[1,2,3],c.coldTrimMins,o=>'−'+o+'m')}<span class="muted small">A player marked ❄️ cold sits at the next change and loses this much off his target. It goes to the T1/T2s.</span></div>
     <div class="field"><label>Never below (bench floor)</label>${seg('devFloorMins',[3,4,6],c.devFloorMins,o=>o+' min')}<span class="muted small">When the hot bonus borrows minutes, nobody is taken below this.</span></div>
   </div>`)}
-  ${sec('alerts','Alerts',`ready ${c.readySecs?c.readySecs+'s':'off'} · buzz ${c.haptics||'strong'} · flash ${onoff(c.flash!==false)}`,`<div class="fields">
+  ${sec('alerts','Alerts',`ready ${c.readySecs?c.readySecs+'s':'off'} · buzz ${canVibrate()?(c.haptics||'strong'):'n/a'} · sound ${soundOn()?'on':'off'} · flash ${onoff(c.flash!==false)}`,`<div class="fields">
     <div class="field"><label>Get-ready warning</label>${seg('readySecs',[0,30,60,90],c.readySecs,o=>o?o+'s':'Off')}<span class="muted small">Tells you who to send to the table.</span></div>
     <div class="field"><label>Counts as on time within</label>${seg('onTimeSecs',[0,30,45,60],c.onTimeSecs,o=>o?'±'+o+'s':'Exact')}<span class="muted small">Waiting for a dead ball isn't "late".</span></div>
-    <div class="field"><label>Vibration</label>${seg('haptics',['strong','light','off'],c.haptics||'strong',o=>o==='strong'?'Strong':o==='light'?'Light':'Off')}<span class="muted small">Get ready, sub now, overdue, 4 fouls, end of quarter. Android only.</span></div>
+    <div class="field"><label>Vibration</label>${seg('haptics',['strong','light','off'],c.haptics||'strong',o=>o==='strong'?'Strong':o==='light'?'Light':'Off')}<span class="muted small">Get ready, sub now, overdue, 4 fouls, end of quarter. Android phones only.${canVibrate()?'':' <b>This device can’t vibrate</b>: use Sound.'}</span></div>
+    <div class="field"><label>Sound</label>${seg('sound',['auto','on','off'],c.sound||'auto',o=>({auto:'Auto',on:'On',off:'Off'})[o])}<span class="muted small">Beeps at the same moments as the buzz. Auto: only on devices that can’t vibrate (iPhone, iPad, most tablets): ${soundOn()?'<b>on here</b>':'off here'}. Turn the volume up. <button class="btn sm" data-act="soundtest">▶ Test</button></span></div>
     <div class="field"><label>Screen flash</label>${seg('flash',[true,false],c.flash!==false,o=>o?'On':'Off')}<span class="muted small">Amber get ready, green sub now, red overdue. Every phone.</span></div>
   </div>`)}
+  ${sec('share','Share &amp; devices','copy your setup to another phone, tablet or coach',`<div class="grid2" style="margin-top:12px"><button class="btn pri" data-act="copy:setup">📋 Copy setup</button><button class="btn" data-act="sheet:setupin">📥 Paste a setup</button></div>
+  <textarea id="setup" readonly style="position:absolute;left:-9999px;width:1px;height:1px">${esc(setupText())}</textarea>
+  <p class="note">Copies your squad (names, numbers, tiers, starters, closers, ball-handlers), team name and every setting as one block of text. Send it by WhatsApp or email, then <b>Paste a setup</b> on your tablet or your assistant coach’s phone. Season games aren’t included: use Logs → Copy season backup for those.</p>`)}
   ${sec('reset','Reset','new match or back to defaults',`<div class="stack">
     <button class="btn danger" data-act="askreset">New match — clear clock, minutes &amp; fouls</button>
     <button class="btn danger" data-act="askfactory">Reset everything to defaults</button>
@@ -1611,6 +1654,11 @@ function renderSheet(){
     ${ABOUT.site?`<p class="small"><a href="${esc(ABOUT.site)}" target="_blank" rel="noopener">Project page &amp; source</a></p>`:''}
     <p class="muted small">Free software under the MIT licence. Screen-on fallback uses NoSleep.js (MIT). Rules defaults follow Basketball NI / FIBA youth play; check your own league's rules.</p>
     <div class="stack"><button class="btn ghost" data-act="close">Close</button></div>`;
+  }else if(ui.sheet==='setupin'){
+    h=S.started?`<h2>Paste a setup</h2><p>A setup replaces the squad, so it can’t be loaded during a game. Finish or reset this game first (Setup → Reset → New match).</p><div class="stack"><button class="btn ghost" data-act="close">Close</button></div>`
+    :`<h2>Paste a setup</h2><p class="muted small">Paste the text that starts <b>PUMAS-SETUP-1:</b> (a season backup works too). It <b>replaces</b> this device’s squad and settings; season games stay as they are.</p>
+    <textarea id="suText" placeholder="PUMAS-SETUP-1:…" style="min-height:120px"></textarea>
+    <div class="stack"><button class="btn pri" data-act="setupgo">Use this setup</button><button class="btn ghost" data-act="close">Cancel</button></div>`;
   }else if(ui.sheet==='awake'){
     h=`<h2>Keeping the screen on</h2><p>The app asks your phone to keep the screen on for the whole game. If it says <b>Screen may sleep</b>, tap anywhere in the app once and it tries again.</p>
     <p class="muted small">If your phone still dims, set it to stay on while you coach: <b>iPhone</b> Settings → Display &amp; Brightness → Auto-Lock → Never. <b>Android</b> Settings → Display → Screen timeout → 10 or 30 minutes. Low Power / Battery Saver mode can also stop it, so turn that off for the game.</p>
@@ -1651,7 +1699,7 @@ function resync(delta,abs){
 }
 
 /* ---------- debug trace: every engine action + what the app believed afterwards ---------- */
-const APP_VERSION='2.17.4 · 2026-10-19';
+const APP_VERSION='2.18.0 · 2026-10-22';
 let dbgDepth=0;
 function dbgInit(){S.debug={app:APP_VERSION,created:new Date().toISOString(),start:{config:JSON.parse(JSON.stringify(S.config)),roster:JSON.parse(JSON.stringify(S.roster)),closersIds:S.closersIds.slice(),periods:S.periods.slice()},ev:[]}}
 const ids2n=a=>(a||[]).map(id=>{const p=P(id);return p?p.num:id});
@@ -1815,6 +1863,10 @@ function act(a,e){
     case 'tmreset':S.config.tierMins={...DEF_CFG.tierMins};replan();save();render();toast('Tier minutes back to 20 / 15 / 10 / 6');break;
     case 'reset':S=freshMatch(S);dbgInit();S.config.tierMins={...S.config.tierMins};ui.sheet=null;ui.tab='live';ui.pendingOut=null;releaseWake();replan();save();render();toast('New match ready — tap the clock to tip off');break;
     case 'copy':copyText(id);break;
+    case 'soundtest':{const ok=beep('now',true);if(!ok)toast('This browser can’t play sounds');else if(!soundOn())toast('That’s the sound. Set Sound to On to use it in games');break}
+    case 'setupgo':{const r=applySetup(($('#suText')||{}).value);if(!r){toast('That isn’t a setup from this app. Copy it again from Setup → Share & devices');break}
+      if(r.err){toast('Finish or reset the game first');break}
+      ui.sheet=null;renderSheet();render();toast('Setup loaded: '+r.n+' players and all settings'+(r.fromBackup?' (season games not added: use Restore for those)':''));break}
     case 'copysel':{const t=document.getElementById('copyArea');if(t){t.focus();t.setSelectionRange(0,t.value.length);if(execCopy(t.value)){toast((ui.copyLabel||'Text')+' copied')}}break}
   }
   if(['cfg','tm','tmreset','starter','closer','addplayer','practice'].includes(k))dbg('setup:'+k,[id,v]);
@@ -1836,6 +1888,7 @@ document.addEventListener('change',e=>{
   dbg('setup:'+k,[id,v]);save();if(k==='tier')render();
 });
 let lpTimer=null,lpStart=null;
+document.addEventListener('pointerdown',()=>{if(soundOn())audioUnlock()},{passive:true});
 document.addEventListener('pointerdown',e=>{
   const t=e.target.closest('[data-lp]');if(!t)return;const bt=e.target.closest('button');if(bt&&bt!==t)return;
   lpStart=[e.clientX,e.clientY];
