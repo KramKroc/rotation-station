@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#020617">
+<meta name="description" content="How to install and use Rotation Station: fair minutes and subs for youth basketball coaches.">
+<title>Rotation Station guide</title>
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#020617;--panel:#0b1328;--line:#1f2b46;--fg:#e6ebf5;--muted:#8a97b3;--accent:#f97316;--go:#22c55e;--warn:#fbbf24;--bad:#ef4444;
+  --display:"Barlow Condensed","Arial Narrow",Impact,sans-serif;--body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:16px}
+body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.55 var(--body);-webkit-text-size-adjust:100%}
+.wrap{max-width:720px;margin:0 auto;padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 48px max(16px,env(safe-area-inset-left))}
+a{color:var(--accent)}
+h1,h2,h3{font-family:var(--display);text-transform:uppercase;letter-spacing:.02em;line-height:1.1;margin:0}
+h1{font-size:40px}
+h2{font-size:30px;margin:56px 0 12px;padding-top:20px;border-top:1px solid var(--line)}
+h3{font-size:21px;margin:28px 0 6px;color:var(--fg)}
+p,ul,ol{margin:0 0 14px;max-width:65ch}
+li{margin-bottom:6px}
+b,strong{font-weight:600}
+.muted{color:var(--muted)}
+.top{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+.top img{width:44px;height:44px;border-radius:10px}
+.lede{font-size:19px;color:var(--fg);margin:12px 0 20px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:48px;padding:10px 18px;border-radius:12px;font-weight:700;text-decoration:none;border:1px solid var(--line);background:var(--panel);color:var(--fg)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#1a0a00}
+.row{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 8px}
+.toc{display:flex;flex-wrap:wrap;gap:8px;margin:20px 0 0;padding:0;list-style:none}
+.toc a{display:block;padding:8px 12px;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--fg);text-decoration:none;font-weight:600;font-size:15px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin:0 0 14px}
+.card h3{margin-top:0}
+.two{display:grid;gap:14px}
+@media (min-width:640px){.two{grid-template-columns:1fr 1fr}}
+.shot{display:grid;gap:18px;align-items:start;margin:8px 0 18px}
+@media (min-width:640px){.shot{grid-template-columns:260px 1fr}}
+figure{margin:0}
+figure img{display:block;width:100%;max-width:260px;height:auto;border-radius:22px;border:1px solid var(--line);margin:0 auto}
+figcaption{font-size:14px;color:var(--muted);text-align:center;margin-top:6px}
+.tag{display:inline-block;padding:1px 7px;border-radius:6px;font-weight:700;font-size:14px;color:#0b1020}
+.t1{background:#f97316}.t2{background:#a78bfa}.t3{background:#34d399}.t4{background:#94a3b8}
+.tip{border-left:4px solid var(--accent);background:var(--panel);padding:12px 14px;border-radius:0 12px 12px 0;margin:0 0 14px;max-width:65ch}
+.warn{border-left-color:var(--warn)}
+table{border-collapse:collapse;width:100%;margin:0 0 14px;font-size:16px}
+td,th{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-family:var(--display);text-transform:uppercase;letter-spacing:.03em;color:var(--muted);font-weight:600}
+details{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:0 14px;margin:0 0 10px}
+summary{cursor:pointer;font-weight:600;padding:12px 0;min-height:48px;display:flex;align-items:center}
+details[open] summary{border-bottom:1px solid var(--line);margin-bottom:10px}
+footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);color:var(--muted);font-size:15px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="top"><img src="icon-192.png" alt=""><h1>Rotation Station</h1></div>
+  <p class="lede">A free phone app for youth basketball coaches. It plans who plays when, so every player gets fair minutes, tells you when to sub, and keeps the score and fouls during the game.</p>
+  <div class="row"><a class="btn pri" href="./">Open the app</a></div>
+  <p class="muted">This guide is for version 2.18.1 · 2026-10-24.</p>
+  <ul class="toc" aria-label="Contents">
+    <li><a href="#install">Install</a></li>
+    <li><a href="#first">First time</a></li>
+    <li><a href="#gameday">Game day</a></li>
+    <li><a href="#live">During the game</a></li>
+    <li><a href="#after">After the game</a></li>
+    <li><a href="#share">Assistant coach</a></li>
+    <li><a href="#alerts">Alerts</a></li>
+    <li><a href="#help">Problems</a></li>
+    <li><a href="#privacy">Privacy</a></li>
+  </ul>
+</header>
+
+<h2 id="install">Install it on your phone</h2>
+<p>It runs in your phone’s browser, so there’s nothing to download from an app store. Add it to your home screen and it opens like any other app.</p>
+<div class="two">
+  <div class="card">
+    <h3>iPhone or iPad</h3>
+    <ol>
+      <li>Open <a href="./">the app link</a> in <b>Safari</b>.</li>
+      <li>Tap the <b>Share</b> button (the square with an arrow).</li>
+      <li>Scroll down and tap <b>Add to Home Screen</b>, then <b>Add</b>.</li>
+    </ol>
+  </div>
+  <div class="card">
+    <h3>Android</h3>
+    <ol>
+      <li>Open <a href="./">the app link</a> in <b>Chrome</b>.</li>
+      <li>Tap the <b>⋮</b> menu at the top right.</li>
+      <li>Tap <b>Install app</b> (or <b>Add to Home screen</b>).</li>
+    </ol>
+  </div>
+</div>
+<div class="tip"><b>Open it once with signal.</b> After that it works with no signal at all, which is handy in sports halls.</div>
+<div class="tip warn"><b>Use the home-screen icon from then on.</b> On iPhone, the home-screen app keeps its own copy of your squad and season, separate from Safari. Set up your squad in the one you’ll use on game day.</div>
+
+<h2 id="first">First time: your squad and settings</h2>
+<div class="shot">
+  <figure><img src="shots/setup.png" width="390" height="760" loading="lazy" alt="The Setup tab, showing the Match section with team name, opponent and date"><figcaption>Setup tab</figcaption></figure>
+  <div>
+    <p>Everything starts on the <b>Setup</b> tab. Each section opens when you tap its heading, and every setting has a short note under it.</p>
+    <h3>1. Match</h3>
+    <p>Type your team’s short name (for the score bar) and full name (for printouts and WhatsApp summaries).</p>
+    <h3>2. Squad &amp; tiers</h3>
+    <p>Replace Player A, Player B and the rest with your players’ names and numbers. Use <b>+ Add player</b> or <b>✕</b> to change the size of the squad.</p>
+    <p>Then put each player in a <b>tier</b>. The tier sets how many minutes they get:</p>
+  </div>
+</div>
+<table>
+  <tr><th>Tier</th><th>Who</th><th>Default minutes</th></tr>
+  <tr><td><span class="tag t1">T1</span></td><td>Core / closers</td><td>20</td></tr>
+  <tr><td><span class="tag t2">T2</span></td><td>Main rotation</td><td>15</td></tr>
+  <tr><td><span class="tag t3">T3</span></td><td>Development</td><td>10</td></tr>
+  <tr><td><span class="tag t4">T4</span></td><td>Emerging</td><td>6</td></tr>
+</table>
+<p>Change the minutes under <b>Game &amp; minutes</b>. If the tiers ask for more (or fewer) minutes than a game has, the app scales the targets a little so it adds up. The note under the tier minutes tells you when that’s happening.</p>
+<p>Three more buttons on each player:</p>
+<ul>
+  <li><b>S</b>: starter. Pick five.</li>
+  <li><b>C</b>: closer. The five who finish the game (see <a href="#closers">closers</a>).</li>
+  <li><b>BH</b>: ball-handler. The plan keeps at least one on court.</li>
+</ul>
+<h3>3. Game length</h3>
+<p>The defaults are 4 × 8-minute quarters with changes every 4 minutes, following Basketball NI / FIBA youth rules. Check your own league’s rules and change them under <b>Game &amp; minutes</b> if they differ.</p>
+<p class="muted">The other sections (Who’s on court, Subs &amp; closers, Hot &amp; cold, Alerts) are fine as they are to start with. Each one explains itself when you open it.</p>
+
+<h2 id="gameday">Game day: before tip-off</h2>
+<ol>
+  <li>Tap <b>⚡ Game-day setup</b> at the top of the Setup tab.</li>
+  <li>Mark anyone missing as <b>Out</b> and check your five starters. Out is for one game only. The player stays in your squad.</li>
+  <li>Type the opponent’s name and pick <b>Game</b> or <b>Practice</b>. Practice games aren’t saved to the season.</li>
+</ol>
+<div class="shot">
+  <figure><img src="shots/plan.png" width="390" height="760" loading="lazy" alt="The Plan tab: a grid of players against 4-minute blocks, with coloured squares for who is on court"><figcaption>Plan tab</figcaption></figure>
+  <div>
+    <p>The <b>Plan</b> tab shows who plays in each block. Each coloured square is a player on court for that block. The rows at the bottom count T1s, ball-handlers and core players on court.</p>
+    <p>Tap a block’s time to lock its lineup or move the change a little earlier or later.</p>
+    <p><b>Copy rotation card</b> gives you the plan as plain text for an assistant or the bench. <b>🖨 Rotation sheet</b> makes a printable version.</p>
+    <p class="muted">The plan is advice. It works itself out again after every sub, foul-out or change of who’s here, so don’t worry if the game doesn’t go to plan.</p>
+  </div>
+</div>
+
+<h2 id="live">During the game</h2>
+<div class="shot">
+  <figure><img src="shots/live.png" width="390" height="760" loading="lazy" alt="The Live tab: score, game clock, and a Get ready box listing three players out and three in, with a Quick swap button"><figcaption>Live tab</figcaption></figure>
+  <div>
+    <h3>The clock</h3>
+    <p>Go to <b>Live</b> and tap the clock to tip off. Tap it again to pause when the referee stops play. If it drifts from the table clock, tap <b>⚙ Resync to table clock</b> and use the −1:00 / −0:10 / +0:10 / +1:00 buttons to match the scoreboard, then <b>Set</b>.</p>
+    <h3>Subs</h3>
+    <p>Before each change the app shows <b>Get ready</b> with who to send to the table. Then <b>Sub now</b> at the change time. When they’re on, tap <b>Quick swap ⚡</b>.</p>
+    <p>You’re always in charge. Tap <b>OUT</b> on anyone on court or <b>IN</b> on anyone on the bench, and the plan adjusts.</p>
+  </div>
+</div>
+<h3>Score, fouls and timeouts</h3>
+<ul>
+  <li>Tap the score bar to add points for either team.</li>
+  <li>Tap <b>F</b> on a player to add a foul. Hold <b>F</b> to take one off. The app warns you when a player is on 4 fouls and suggests who to bring on.</li>
+  <li>Tap <b>⏱ Timeout</b> to log one. If the other team goes on a run, the app suggests a timeout at the next dead ball.</li>
+  <li>Made a mistake? <b>↩ Undo</b> at the bottom of the screen.</li>
+</ul>
+<h3>Hot, cold and injuries</h3>
+<p>Tap <b>⋯</b> on a player:</p>
+<ul>
+  <li><b>🔥 Hot</b> keeps them on through the next block.</li>
+  <li><b>❄️ Cold</b> rests them at the next change and trims their minutes.</li>
+  <li>Fix their minutes if they were on or off longer than the app thinks.</li>
+</ul>
+<p>If someone gets injured, mark them <b>Out</b> in Game-day setup. They keep the minutes they’ve already played, and their remaining minutes are shared out.</p>
+<div class="shot">
+  <figure><img src="shots/glance.png" width="390" height="760" loading="lazy" alt="Glance mode: a big clock, the next change in large text, score buttons and a foul button for each player on court"><figcaption>Glance mode</figcaption></figure>
+  <div>
+    <h3>Glance mode</h3>
+    <p>Tap <b>👁 Glance mode</b> for one big screen with just the clock, the next change, score buttons and fouls. It’s made for reading at arm’s length on the bench. Tap <b>✕ Full view</b> to go back.</p>
+    <h3 id="closers">Closers</h3>
+    <p>In the last 4 minutes of the game, your five closers (<b>C</b>) are on and routine subs stop. The app still tells you if you need to cover a foul-out or injury. You can change this under <b>Subs &amp; closers</b>.</p>
+    <h3>Quarter breaks</h3>
+    <p>When a quarter ends, tap <b>Quarter break ⏩</b> to move to the next one. Changes due at the start of a quarter are made during the break.</p>
+  </div>
+</div>
+
+<h2 id="after">After the game</h2>
+<div class="shot">
+  <figure><img src="shots/logs.png" width="390" height="760" loading="lazy" alt="The Season table on the Logs tab: minutes for each player, with a note on who is behind on minutes"><figcaption>Season on the Logs tab</figcaption></figure>
+  <div>
+    <p>At full time, go to <b>Logs</b>:</p>
+    <ul>
+      <li><b>Copy for WhatsApp</b>: the score and everyone’s minutes, ready to paste to parents or the club.</li>
+      <li><b>Copy CSV</b>: the same for a spreadsheet.</li>
+      <li><b>Season</b>: games are saved here at full time, so you can see minutes across the season. Players who are behind on minutes are listed at the top. <b>Season catch-up</b> (in Setup) can give them a little more next game.</li>
+    </ul>
+    <div class="tip warn"><b>Back up after every game.</b> Tap <b>💾 Copy season backup</b> and paste it into WhatsApp (to yourself is fine). Your season lives only on your phone, so a lost phone or cleared browser would lose it. <b>Restore</b> on the same tab brings it back.</div>
+    <p>Then tap <b>New match</b>. It clears the clock, minutes and fouls but keeps your squad and settings.</p>
+  </div>
+</div>
+
+<h2 id="share">Sharing with an assistant coach or a tablet</h2>
+<div class="shot">
+  <figure><img src="shots/share.png" width="390" height="760" loading="lazy" alt="The Share and devices section of Setup with Copy setup and Paste a setup buttons"><figcaption>Setup → Share &amp; devices</figcaption></figure>
+  <div>
+    <ol>
+      <li>On your phone: <b>Setup → Share &amp; devices → 📋 Copy setup</b>.</li>
+      <li>Send the text by WhatsApp or email.</li>
+      <li>On the other device: install the app, then <b>Setup → Share &amp; devices → 📥 Paste a setup</b>.</li>
+    </ol>
+    <p>This copies your squad, team name and every setting. It replaces the squad on the other device, so it can’t be done during a game. Season games aren’t included. To move those, use <b>Copy season backup</b> and <b>Restore</b> on the Logs tab.</p>
+  </div>
+</div>
+
+<h2 id="alerts">Alerts: vibration, sound and screen flash</h2>
+<p>The app tells you when to <b>get ready</b>, when to <b>sub now</b>, when a change is <b>overdue</b>, when a player is on <b>4 fouls</b>, and at the <b>end of a quarter</b>. Set how under <b>Setup → Alerts</b>.</p>
+<table>
+  <tr><th>Alert</th><th>Works on</th></tr>
+  <tr><td>Vibration</td><td>Android phones only. iPhones don’t let web apps vibrate.</td></tr>
+  <tr><td>Sound</td><td><b>Auto</b> beeps on devices that can’t vibrate: iPhone, iPad and tablets. Tap <b>▶ Test</b> and turn the volume up.</td></tr>
+  <tr><td>Screen flash</td><td>Every phone. Amber for get ready, green for sub now, red for overdue.</td></tr>
+</table>
+<p>The app also keeps your screen on during a game. You’ll see <b>☀ Screen on</b> at the top of the Live tab.</p>
+
+<h2 id="help">Problems and questions</h2>
+<details>
+  <summary>The screen keeps going dark</summary>
+  <p>If the Live tab says <b>Screen may sleep</b>, tap anywhere in the app and it tries again. If it still dims, change your phone’s setting for the game: <b>iPhone</b> Settings → Display &amp; Brightness → Auto-Lock → Never. <b>Android</b> Settings → Display → Screen timeout → 10 or 30 minutes. Low Power Mode or Battery Saver can also stop it, so turn that off for the game.</p>
+</details>
+<details>
+  <summary>I can’t hear any beeps</summary>
+  <p>Check <b>Setup → Alerts → Sound</b> is on <b>Auto</b> or <b>On</b>, turn the volume up and tap <b>▶ Test</b>. On iPhone the app asks to play even with the silent switch on, but a quick tap on the screen at the start of the game helps it get going.</p>
+</details>
+<details>
+  <summary>How do I get the latest version?</summary>
+  <p>Open the app while you have signal. It downloads the new version in the background and uses it the next time you open it. The version number is at the bottom of the Setup tab.</p>
+</details>
+<details>
+  <summary>I got a new phone</summary>
+  <p>On the old phone, copy your setup (<b>Setup → Share &amp; devices</b>) and your season backup (<b>Logs</b>). Install the app on the new phone, then paste the setup and restore the backup.</p>
+</details>
+<details>
+  <summary>A player is missing for a game, or has left the team</summary>
+  <p>Missing for one game: mark them <b>Out</b> in Game-day setup. Left the team: tap <b>✕</b> next to their name in Setup. Their minutes from past games stay in the season table.</p>
+</details>
+<details>
+  <summary>We’re running late and the plan says someone is overdue</summary>
+  <p>That’s fine. The app allows a short wait for a dead ball before it calls a change overdue (<b>Setup → Alerts → Counts as on time within</b>). Make the change at the next stoppage and tap <b>Quick swap</b>; the rest of the plan adjusts to the clock.</p>
+</details>
+<details>
+  <summary>Does it follow my league’s rules?</summary>
+  <p>The defaults follow Basketball NI / FIBA youth play (4 × 8-minute quarters, 4-minute overtime). You can change the quarter length, overtime and minutes for each tier in Setup. Always check your own league’s rules.</p>
+</details>
+
+<h2 id="privacy">Privacy</h2>
+<p><b>Your data stays on your phone.</b> There’s no account, no sign-up and no tracking. Names, minutes and scores are kept only in the browser on your device. Nothing is sent anywhere unless you copy it out yourself, as a backup, a summary or a setup.</p>
+<p class="muted">Clearing your browser data or deleting the app deletes it too, which is why the season backup matters.</p>
+
+<footer>
+  <p>Free to use. If it helps your team, you can <a href="https://ko-fi.com/rotationstation" target="_blank" rel="noopener">Buy me a coffee</a>.</p>
+  <p>Rotation Station 2.18.1 · 2026-10-24 · free software under the MIT licence · <a href="./">Open the app</a></p>
+</footer>
+
+</div>
+</body>
+</html>
