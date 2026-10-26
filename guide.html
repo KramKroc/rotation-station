@@ -63,7 +63,7 @@ footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);color:v
   <div class="top"><img src="icon-192.png" alt=""><h1>Rotation Station</h1></div>
   <p class="lede">A free phone app for youth basketball coaches. It plans who plays when, so every player gets fair minutes, tells you when to sub, and keeps the score and fouls during the game.</p>
   <div class="row"><a class="btn pri" href="./">Open the app</a></div>
-  <p class="muted">This guide is for version 2.18.1 · 2026-10-24.</p>
+  <p class="muted">This guide is for version 2.19.0 · 2026-10-25.</p>
   <ul class="toc" aria-label="Contents">
     <li><a href="#install">Install</a></li>
     <li><a href="#first">First time</a></li>
@@ -127,13 +127,14 @@ footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);color:v
   <li><b>BH</b>: ball-handler. The plan keeps at least one on court.</li>
 </ul>
 <h3>3. Game length</h3>
-<p>The defaults are 4 × 8-minute quarters with changes every 4 minutes, following Basketball NI / FIBA youth rules. Check your own league’s rules and change them under <b>Game &amp; minutes</b> if they differ.</p>
+<p>The defaults are 4 × 8-minute quarters with changes every 4 minutes, as in most FIBA youth leagues. Check your own league’s rules and change them under <b>Game &amp; minutes</b> if they differ.</p>
 <p class="muted">The other sections (Who’s on court, Subs &amp; closers, Hot &amp; cold, Alerts) are fine as they are to start with. Each one explains itself when you open it.</p>
 
 <h2 id="gameday">Game day: before tip-off</h2>
 <ol>
   <li>Tap <b>⚡ Game-day setup</b> at the top of the Setup tab.</li>
   <li>Mark anyone missing as <b>Out</b> and check your five starters. Out is for one game only. The player stays in your squad.</li>
+  <li>Squad bigger than the match-day limit (12 by default, set under <b>Squad &amp; tiers</b>)? The list shows how many you’ve picked, for example “12 of 14 picked”, and warns while there are too many. Players you mark Out show as <b>Not picked</b>. Tap that to switch to <b>Not here</b> if they’re actually away. “Sat out 2” next to a name counts this season’s games they weren’t picked, so you can rotate it fairly. The season table shows <b>NP</b> for those games.</li>
   <li>Type the opponent’s name and pick <b>Game</b> or <b>Practice</b>. Practice games aren’t saved to the season.</li>
 </ol>
 <div class="shot">
@@ -161,6 +162,7 @@ footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);color:v
 <ul>
   <li>Tap the score bar to add points for either team.</li>
   <li>Tap <b>F</b> on a player to add a foul. Hold <b>F</b> to take one off. The app warns you when a player is on 4 fouls and suggests who to bring on.</li>
+  <li>Tap <b>Their foul</b> each time the other team fouls. Hold it to take one off. From their 5th team foul in a quarter you’re shooting free throws, and the app tells you to attack the rim.</li>
   <li>Tap <b>⏱ Timeout</b> to log one. If the other team goes on a run, the app suggests a timeout at the next dead ball.</li>
   <li>Made a mistake? <b>↩ Undo</b> at the bottom of the screen.</li>
 </ul>
@@ -176,7 +178,7 @@ footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);color:v
   <figure><img src="shots/glance.png" width="390" height="760" loading="lazy" alt="Glance mode: a big clock, the next change in large text, score buttons and a foul button for each player on court"><figcaption>Glance mode</figcaption></figure>
   <div>
     <h3>Glance mode</h3>
-    <p>Tap <b>👁 Glance mode</b> for one big screen with just the clock, the next change, score buttons and fouls. It’s made for reading at arm’s length on the bench. Tap <b>✕ Full view</b> to go back.</p>
+    <p>Tap <b>👁 Glance mode</b> for one big screen with just the clock, the next change, score buttons and fouls (yours and theirs). It’s made for reading at arm’s length on the bench. The <b>⏱ Timeout</b>, <b>⚙ Resync</b> and <b>⏩ Break</b> buttons are there too, and you can hold the clock to resync it. Tap <b>✕ Full view</b> to go back.</p>
     <h3 id="closers">Closers</h3>
     <p>In the last 4 minutes of the game, your five closers (<b>C</b>) are on and routine subs stop. The app still tells you if you need to cover a foul-out or injury. You can change this under <b>Subs &amp; closers</b>.</p>
     <h3>Quarter breaks</h3>
@@ -240,6 +242,10 @@ footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);color:v
   <p>On the old phone, copy your setup (<b>Setup → Share &amp; devices</b>) and your season backup (<b>Logs</b>). Install the app on the new phone, then paste the setup and restore the backup.</p>
 </details>
 <details>
+  <summary>I have more players than can play</summary>
+  <p>Set <b>Match-day limit</b> under Setup → Squad &amp; tiers (Off, 10, 12 or 15). On game day, mark the players who sit out as Out. They’re recorded as <b>Not picked</b>, not absent, and the WhatsApp summary lists them. The app counts who has sat out and how often, but you always choose.</p>
+</details>
+<details>
   <summary>A player is missing for a game, or has left the team</summary>
   <p>Missing for one game: mark them <b>Out</b> in Game-day setup. Left the team: tap <b>✕</b> next to their name in Setup. Their minutes from past games stay in the season table.</p>
 </details>
@@ -249,7 +255,7 @@ footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);color:v
 </details>
 <details>
   <summary>Does it follow my league’s rules?</summary>
-  <p>The defaults follow Basketball NI / FIBA youth play (4 × 8-minute quarters, 4-minute overtime). You can change the quarter length, overtime and minutes for each tier in Setup. Always check your own league’s rules.</p>
+  <p>The defaults follow common FIBA youth play (4 × 8-minute quarters, 4-minute overtime). You can change the quarter length, overtime and minutes for each tier in Setup. Always check your own league’s rules.</p>
 </details>
 
 <h2 id="privacy">Privacy</h2>
@@ -258,7 +264,7 @@ footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);color:v
 
 <footer>
   <p>Free to use. If it helps your team, you can <a href="https://ko-fi.com/rotationstation" target="_blank" rel="noopener">Buy me a coffee</a>.</p>
-  <p>Rotation Station 2.18.1 · 2026-10-24 · free software under the MIT licence · <a href="./">Open the app</a></p>
+  <p>Rotation Station 2.19.0 · 2026-10-25 · free software under the MIT licence · <a href="./">Open the app</a></p>
 </footer>
 
 </div>

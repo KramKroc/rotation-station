@@ -20,4 +20,4 @@ Free to use. If it helps your team, you can [Buy me a coffee](https://ko-fi.com/
 ## Licence
 MIT. See LICENSE.
 
-<sub>Version 2.18.1 · 2026-10-24. This repository holds the built app only.</sub>
+<sub>Version 2.19.0 · 2026-10-25. This repository holds the built app only.</sub>
