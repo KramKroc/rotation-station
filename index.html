@@ -516,10 +516,10 @@ function inLockBlock(b){const L=S.config.closerLockSeconds;if(!L)return false;if
 function bhPool(){const av=availList(),pt=protectedTier(),hi=av.filter(p=>p.bh&&!(pt>=3&&p.tier===pt));return hi.length?hi:av.filter(p=>p.bh)}
 const isBHp=p=>!!p&&bhPool().includes(p);
 function bhFloorEff(){const f=+S.config.bhFloor||0;return Math.min(f,bhPool().length)}
-function solvePlan(halves,T){
+function solvePlan(halves,T,fine){   // fine: the final plan, polished (choosing mini subs compares the quick version)
   const B=blocksAll(halves),now=elapsedAbs(),av=availList(),ids=new Set(av.map(p=>p.id));
-  const plan=JSON.parse(JSON.stringify(S.plan)),oldPlan=S.plan;
-  const R={};av.forEach(p=>R[p.id]=(T[p.id]||0)*60-played(p.id));
+  let plan=JSON.parse(JSON.stringify(S.plan)),R={};const oldPlan=S.plan;
+  av.forEach(p=>R[p.id]=(T[p.id]||0)*60-played(p.id));
   const cur=B.find(b=>b.abs0<now&&now<b.abs1);
   if(cur){if(!plan[cur.key]||plan[cur.key].some(id=>!ids.has(id)))plan[cur.key]=S.onCourtIds.slice();const r=cur.abs1-now;S.onCourtIds.forEach(id=>{if(id in R)R[id]-=r})}
   let prev=S.started?S.onCourtIds.slice():[];
@@ -528,6 +528,7 @@ function solvePlan(halves,T){
   const forced={},lockKeys=new Set();
   fut.forEach(b=>{if(S.fixed[b.key])forced[b.key]=S.fixed[b.key].filter(id=>ids.has(id))});
   fut.forEach(b=>{if(!S.fixed[b.key]&&inLockBlock(b)&&closers.length){forced[b.key]=closers;lockKeys.add(b.key);closers.forEach(id=>R[id]-=b.dur)}});
+  const R0={...R};   // owed before any block outside the lock is filled
   if(!S.started&&fut[0]&&fut[0].abs0===0&&!forced[fut[0].key]){
     const starters=S.roster.filter(p=>p.starter&&ids.has(p.id)).map(p=>p.id).slice(0,5);
     if(starters.length)forced[fut[0].key]=starters;
@@ -628,22 +629,25 @@ function solvePlan(halves,T){
   });
   // lowest-tier guarantee: if the constraints (ball-handler, T1 floor, change limit) left a lowest-tier player short, swap him into a
   // future block for the most-over player there, as long as every floor and the change limit still hold
-  if(pt0>=3){
-    const K=+S.config.maxSubs||0,brk=S.config.maxSubsBreaks!==false,ch=(x,y)=>y.filter(id=>!x.includes(id)).length;
-    const ok=(b,lu,i,soft)=>{   // soft: the lowest-tier guarantee may let the T1 floor dip to one T1 (his minutes come first)
-      if(lu.filter(id=>tierOf(id)<=2).length<Math.min(floor,(plan[b.key]||[]).filter(id=>tierOf(id)<=2).length))return false;
-      if(lu.filter(id=>tierOf(id)===1).length<Math.min(soft?Math.min(1,t1Floor):t1Floor,(plan[b.key]||[]).filter(id=>tierOf(id)===1).length))return false;
-      if(lu.filter(isBH).length<Math.min(bhF,(plan[b.key]||[]).filter(isBH).length))return false;
+  const K=+S.config.maxSubs||0,brk=S.config.maxSubsBreaks!==false,ch=(x,y)=>y.filter(id=>!x.includes(id)).length;
+  let fb=null;   // the plan whose floors a swap may not go below (normally the plan being changed)
+  const ok=(b,lu,i,soft)=>{   // soft: the lowest-tier guarantee may let the T1 floor dip to one T1 (his minutes come first)
+      const was=(fb||plan)[b.key]||[];
+      if(lu.filter(id=>tierOf(id)<=2).length<Math.min(floor,was.filter(id=>tierOf(id)<=2).length))return false;
+      if(lu.filter(id=>tierOf(id)===1).length<Math.min(soft?Math.min(1,t1Floor):t1Floor,was.filter(id=>tierOf(id)===1).length))return false;
+      if(lu.filter(isBH).length<Math.min(bhF,was.filter(isBH).length))return false;
       if(lowT&&lu.filter(id=>tierOf(id)===lowT).length>1)return false;
       const pv=i>0?plan[fut[i-1].key]:(S.started?S.onCourtIds:null),nx=fut[i+1]?plan[fut[i+1].key]:null;
       const lim=(bb,x,y)=>{if(!x||!y||x.length<5)return true;if(bb.half===2)return ch(x,y)<=1;if(!K||(bb.s===0&&!brk)||lockKeys.has(bb.key)||forced[bb.key])return true;return ch(x,y)<=K};
       return lim(b,pv,lu)&&(!nx||lim(fut[i+1],lu,nx));
-    };
+  };
+  const frozen=b=>forced[b.key]||lockKeys.has(b.key)||b.key===firstKey&&S.started&&b.abs0<=now+1&&(S.clockRunning||b.s>0||b.abs0<now-1||S.applied[b.key]||S.fixed[b.key]);   // a quarter's first block is still open during the break, until those subs are made
+  if(pt0>=3){
     for(const pass of [0,1])for(let g=0;g<12;g++){   // strict first; only if that fails, allow one T1 instead of two
       const owed=av.filter(p=>p.tier===pt0&&R[p.id]>15).sort((x,y)=>R[y.id]-R[x.id])[0];if(!owed)break;
       let best=null;
       fut.forEach((b,i)=>{
-        if(forced[b.key]||lockKeys.has(b.key)||b.key===firstKey&&S.started&&b.abs0<=now+1&&(S.clockRunning||b.s>0||b.abs0<now-1||S.applied[b.key]||S.fixed[b.key]))return;   // a quarter's first block is still open during the break, until those subs are made
+        if(frozen(b))return;
         const lu=plan[b.key]||[];if(lu.includes(owed.id))return;const overshoot=Math.max(0,b.dur-R[owed.id]);   // a little extra for the lowest tier beats leaving him short
         lu.forEach(o=>{const po=P(o);if(!po||po.tier===pt0||po.hot&&b.abs0<(po.hotUntil||0))return;
           const nl=lu.map(x=>x===o?owed.id:x);if(!ok(b,nl,i,pass>0))return;
@@ -652,10 +656,64 @@ function solvePlan(halves,T){
       plan[best.b.key]=best.nl;R[best.o]+=best.b.dur;R[owed.id]-=best.b.dur;
     }
   }
+  // polish: the pass above settles one block at a time and never looks back, so the closers lock, the floors and the change limit can
+  // leave it well off target. Swap one player in a future block while that brings the squad closer to its targets overall,
+  // keeping every floor, the change limit, the lowest-tier rules and the rest guard.
+  const run=(id,i,j)=>{   // the longest he'd be on without a rest if he plays blocks i..j (a quarter break is a rest)
+    let best=0;
+    for(let x=i;x<=j;x++){if(x>i&&fut[x].p===fut[x-1].p)continue;
+      const q=fut[x].p;let t=0,k=x-1,e=x;for(;e<=j&&fut[e].p===q;e++)t+=fut[e].dur;
+      for(;k>=0&&fut[k].p===q&&(plan[fut[k].key]||[]).includes(id);k--)t+=fut[k].dur;
+      if(k<0&&cur&&cur.p===q&&S.onCourtIds.includes(id))t+=st(id).consecutiveSeconds+cur.abs1-now;
+      for(k=e;k<fut.length&&fut[k].p===q&&(plan[fut[k].key]||[]).includes(id);k++)t+=fut[k].dur;
+      best=Math.max(best,t)}
+    return best};
+  const lowOnly=id=>pt0>=3&&tierOf(id)===pt0;
+  const cost=r=>sum(av.map(p=>Math.abs(r[p.id]))),lowShort=r=>sum(av.filter(p=>lowOnly(p.id)).map(p=>Math.max(0,r[p.id])));
+  const polish=()=>{const fb0=fb;for(let it=0;it<80;it++){
+    let best=null;fb={...plan};   // floors are checked against the plan before this swap
+    fut.forEach((b,i)=>{
+      const lu=plan[b.key]||[];if(lu.length<5||frozen(b))return;
+      lu.forEach(o=>{const po=P(o);if(!po)return;
+        av.forEach(p=>{if(lu.includes(p.id)||p.cold&&b.key===firstKey)return;
+          // swap him for o over a run of blocks i..j where o is on and he isn't: a longer run changes only its two ends
+          let d=0;const old={};
+          for(let j=i;j<fut.length&&j<i+6;j++){
+            const bj=fut[j],lj=plan[bj.key]||[];
+            if(j>i&&(lj.length<5||frozen(bj)||!lj.includes(o)||lj.includes(p.id)))break;
+            if(po.hot&&bj.abs0<(po.hotUntil||0)||foulPen(p,bj)>foulPen(po,bj))break;
+            d+=bj.dur;old[bj.key]=lj;
+            if(lowOnly(o)&&R[o]+d>0||lowOnly(p.id)&&R[p.id]<=0)break;   // the lowest tier only gains: more minutes when owed, never fewer than his target
+            const a0=Math.abs(R[o])+Math.abs(R[p.id]),a1=Math.abs(R[o]+d)+Math.abs(R[p.id]-d),lg=lowOnly(p.id)?Math.min(R[p.id],d):0;   // lg: lowest-tier minutes made good
+            if(lg>0?a1-a0>d:a0-a1<30||Math.max(Math.abs(R[o]+d),Math.abs(R[p.id]-d))>Math.max(Math.abs(R[o]),Math.abs(R[p.id])))continue;   // worth half a minute and no one ends further off than before (a short lowest-tier player comes first)
+            Object.keys(old).forEach(k=>plan[k]=old[k].map(x=>x===o?p.id:x));
+            let good=true;for(let x=i;x<=j&&good;x++)good=ok(fut[x],plan[fut[x].key],x,false);
+            if(good&&i>0)good=ok(fut[i-1],plan[fut[i-1].key],i-1,false);
+            if(good&&restLim&&!p.hot&&run(p.id,i,j)>restLim)good=false;
+            Object.keys(old).forEach(k=>plan[k]=old[k]);
+            if(!good)continue;
+            const v=10*lg+a0-a1+(R[o]*R[o]+R[p.id]*R[p.id]-(R[o]+d)**2-(R[p.id]-d)**2)/6000;   // ties: even out the biggest gaps first
+            if(!best||v>best.v)best={keys:Object.keys(old),o,id:p.id,d,v}}})})});
+    if(!best)break;
+    best.keys.forEach(k=>plan[k]=plan[k].map(x=>x===best.o?best.id:x));R[best.o]+=best.d;R[best.id]-=best.d;
+  }fb=fb0};
+  if(fine)polish();
+  // every sub rebuilds the plan from scratch, which can land further from the targets than the plan it replaces:
+  // keep the previous plan (polished the same way) while it's still legal, unless the fresh one is clearly better, so the plan doesn't lurch mid-game.
+  // Only when nothing but the clock and the planned subs has changed: fouls, hot/cold, a lock or a settings change get a fresh plan
+  if(fine&&fut.length&&S.planSig===planSig()&&fut.every(b=>{const lu=oldPlan[b.key];return lu&&lu.length===5&&lu.every(id=>ids.has(id))&&(forced[b.key]||[]).every(id=>lu.includes(id))})){
+    const A=plan,RA=R;
+    plan=JSON.parse(JSON.stringify(A));fut.forEach(b=>plan[b.key]=oldPlan[b.key].slice());
+    R={...R0};fut.forEach(b=>{if(!lockKeys.has(b.key))plan[b.key].forEach(id=>R[id]-=b.dur)});
+    fb=A;const legal=fut.every((b,i)=>ok(b,plan[b.key],i,true));   // soft: it may keep a block where one T1 made room for the lowest tier
+    if(legal)polish();
+    fb=null;const lc=lowShort(R),la=lowShort(RA);   // the lowest tier first, then the total
+    if(!legal||lc>la||lc===la&&cost(R)>cost(RA)+120){plan=A;R=RA}   // a fresh plan has to be clearly better (2 min overall) to replace the one the bench is following
+  }
   const keys=new Set(B.map(b=>b.key));Object.keys(plan).forEach(k=>{if(!keys.has(k))delete plan[k]});
   // how far the whole plan lands from the targets, in minutes (sum of |projected − target|)
-  let err=0;av.forEach(p=>err+=Math.abs(R[p.id])/60);
-  return {plan,err};
+  const err=cost(R)/60;
+  return {plan,err,low:lowShort(R)};
 }
 // with at most 2 changing at once, fairness needs the extra one-player changes: allow at least 2 mini subs a quarter
 const miniSubsMax=()=>(+S.config.maxSubs===2)?Math.max(2,S.config.miniSubs|0):(S.config.miniSubs|0);
@@ -680,14 +738,18 @@ function chooseHalves(T){
   }
   return halves;
 }
+// what the plan depends on apart from the clock and the subs made (a change here gets a fresh plan)
+const planSig=()=>JSON.stringify([availList().map(p=>[p.id,p.tier,st(p.id).fouls,!!p.hot,p.hotUntil||0,!!p.cold,!!p.bh]),S.config,S.closersIds,S.pinned,S.moves,S.periods,S.adj]);
 function replan(){
   const now=elapsedAbs(),av=availList(),ids=new Set(av.map(p=>p.id));
   S.onCourtIds=S.onCourtIds.filter(id=>ids.has(id));
   // hot lasts through the next block, then clears itself (his bonus minutes stay)
   if(!S.finished)av.forEach(p=>{if(p.hot&&p.hotUntil!=null&&now>=p.hotUntil){p.hot=false;p.hotUntil=null;log(clockLabel()+' — '+tag(p.id)+' hot stint done, back on normal rotation'+(S.adj['hot:'+p.id]?' (keeps his bonus minutes)':''),'rp')}});
-  const T=targets();
+  const T=targets(),oldH=S.halves||{},same=S.planSig===planSig(),hk=h=>Object.keys(h).sort().join();
   S.halves=chooseHalves(T);
-  S.plan=solvePlan(S.halves,T).plan;
+  let r=solvePlan(S.halves,T,true);
+  if(same&&hk(oldH)!==hk(S.halves)){const r2=solvePlan(oldH,T,true);if(r2.low<r.low||r2.low===r.low&&r2.err<=r.err){r=r2;S.halves={...oldH}}}   // keep the mini subs already planned unless changing them does better
+  S.plan=r.plan;S.planSig=planSig();
   const fut=blocksAll().filter(b=>b.abs0>=now);
   if(!S.started&&fut[0])S.onCourtIds=(S.plan[fut[0].key]||[]).slice();
 }
@@ -1737,7 +1799,7 @@ function resync(delta,abs){
 }
 
 /* ---------- debug trace: every engine action + what the app believed afterwards ---------- */
-const APP_VERSION='2.19.0 · 2026-10-25';
+const APP_VERSION='2.19.1 · 2026-10-28';
 let dbgDepth=0;
 function dbgInit(){S.debug={app:APP_VERSION,created:new Date().toISOString(),start:{config:JSON.parse(JSON.stringify(S.config)),roster:JSON.parse(JSON.stringify(S.roster)),closersIds:S.closersIds.slice(),periods:S.periods.slice()},ev:[]}}
 const ids2n=a=>(a||[]).map(id=>{const p=P(id);return p?p.num:id});
