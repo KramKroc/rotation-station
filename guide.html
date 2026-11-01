@@ -63,10 +63,11 @@ footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);color:v
   <div class="top"><img src="icon-192.png" alt=""><h1>Rotation Station</h1></div>
   <p class="lede">A free phone app for youth basketball coaches. It plans who plays when, so every player gets fair minutes, tells you when to sub, and keeps the score and fouls during the game.</p>
   <div class="row"><a class="btn pri" href="./">Open the app</a></div>
-  <p class="muted">This guide is for version 2.19.1 · 2026-10-28.</p>
+  <p class="muted">This guide is for version 2.20.0 · 2026-10-29.</p>
   <ul class="toc" aria-label="Contents">
     <li><a href="#install">Install</a></li>
     <li><a href="#first">First time</a></li>
+    <li><a href="#teams">Teams</a></li>
     <li><a href="#gameday">Game day</a></li>
     <li><a href="#live">During the game</a></li>
     <li><a href="#after">After the game</a></li>
@@ -102,11 +103,12 @@ footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);color:v
 
 <h2 id="first">First time: your squad and settings</h2>
 <div class="shot">
-  <figure><img src="shots/setup.png" width="390" height="760" loading="lazy" alt="The Setup tab, showing the Match section with team name, opponent and date"><figcaption>Setup tab</figcaption></figure>
+  <figure><img src="shots/setup.png" width="390" height="760" loading="lazy" alt="The Setup tab, showing the team bar, Game-day setup and the Squad and tiers section"><figcaption>Setup tab</figcaption></figure>
   <div>
     <p>Everything starts on the <b>Setup</b> tab. Each section opens when you tap its heading, and every setting has a short note under it.</p>
-    <h3>1. Match</h3>
-    <p>Type your team’s short name (for the score bar) and full name (for printouts and WhatsApp summaries).</p>
+    <p>The sections under <b>This team</b> belong to the team named at the top. The ones under <b>This phone</b> (alerts) stay the same whichever team you’re on.</p>
+    <h3>1. Your team’s name</h3>
+    <p>Open <b>Name, sharing &amp; reset</b> and type your team’s short name (for the score bar) and full name (for printouts, WhatsApp summaries and the team list).</p>
     <h3>2. Squad &amp; tiers</h3>
     <p>Replace Player A, Player B and the rest with your players’ names and numbers. Use <b>+ Add player</b> or <b>✕</b> to change the size of the squad.</p>
     <p>Then put each player in a <b>tier</b>. The tier sets how many minutes they get:</p>
@@ -128,7 +130,16 @@ footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);color:v
 </ul>
 <h3>3. Game length</h3>
 <p>The defaults are 4 × 8-minute quarters with changes every 4 minutes, as in most FIBA youth leagues. Check your own league’s rules and change them under <b>Game &amp; minutes</b> if they differ.</p>
-<p class="muted">The other sections (Who’s on court, Subs &amp; closers, Hot &amp; cold, Alerts) are fine as they are to start with. Each one explains itself when you open it.</p>
+<p class="muted">The other sections (Who’s on court, Subs &amp; closers, More rules, Alerts) are fine as they are to start with. Each one explains itself when you open it.</p>
+
+<h2 id="teams">More than one team</h2>
+<p>Coach an U14 and an U16 side, or an A and a B team? Tap the team name at the top of the Setup tab, then <b>+ Add a team</b>. Pick its quarter length and whether to copy your current team’s rules. Each team keeps its own squad, settings and season, and the app opens on the last team you used.</p>
+<ul>
+  <li><b>Switch teams</b> from the same list. You can’t switch during a game: finish it (full time) or tap New match first.</li>
+  <li><b>A player who plays up:</b> in Squad &amp; tiers, tap <b>+ From another team</b>. He’s copied across; his minutes for each team are counted separately.</li>
+  <li><b>Two games at the same time</b> need two phones. Afterwards, add the other game to the season with <b>Logs → + Past game</b>.</li>
+  <li><b>Backups are per team.</b> Copy a season backup from each team’s Logs tab. On a new phone, use <b>Restore as a new team</b> for the second and later teams.</li>
+</ul>
 
 <h2 id="gameday">Game day: before tip-off</h2>
 <ol>
@@ -203,19 +214,19 @@ footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);color:v
 
 <h2 id="share">Sharing with an assistant coach or a tablet</h2>
 <div class="shot">
-  <figure><img src="shots/share.png" width="390" height="760" loading="lazy" alt="The Share and devices section of Setup with Copy setup and Paste a setup buttons"><figcaption>Setup → Share &amp; devices</figcaption></figure>
+  <figure><img src="shots/share.png" width="390" height="760" loading="lazy" alt="The Name, sharing and reset section of Setup with Copy setup and Paste a setup buttons"><figcaption>Setup → Name, sharing &amp; reset</figcaption></figure>
   <div>
     <ol>
-      <li>On your phone: <b>Setup → Share &amp; devices → 📋 Copy setup</b>.</li>
+      <li>On your phone: <b>Setup → Name, sharing &amp; reset → 📋 Copy setup</b>.</li>
       <li>Send the text by WhatsApp or email.</li>
-      <li>On the other device: install the app, then <b>Setup → Share &amp; devices → 📥 Paste a setup</b>.</li>
+      <li>On the other device: install the app, then <b>📥 Paste a setup</b> in the same place.</li>
     </ol>
-    <p>This copies your squad, team name and every setting. It replaces the squad on the other device, so it can’t be done during a game. Season games aren’t included. To move those, use <b>Copy season backup</b> and <b>Restore</b> on the Logs tab.</p>
+    <p>This copies one team’s squad, name and settings. On the other device, choose <b>Add as a new team</b>, or <b>Replace</b> to overwrite the team that’s open there (not during a game). Season games aren’t included. To move those, use <b>Copy season backup</b> and <b>Restore</b> on the Logs tab.</p>
   </div>
 </div>
 
 <h2 id="alerts">Alerts: vibration, sound and screen flash</h2>
-<p>The app tells you when to <b>get ready</b>, when to <b>sub now</b>, when a change is <b>overdue</b>, when a player is on <b>4 fouls</b>, and at the <b>end of a quarter</b>. Set how under <b>Setup → Alerts</b>.</p>
+<p>The app tells you when to <b>get ready</b>, when to <b>sub now</b>, when a change is <b>overdue</b>, when a player is on <b>4 fouls</b>, and at the <b>end of a quarter</b>. Set how under <b>Setup → Alerts</b>. Alerts belong to the phone, so they’re the same for every team.</p>
 <table>
   <tr><th>Alert</th><th>Works on</th></tr>
   <tr><td>Vibration</td><td>Android phones only. iPhones don’t let web apps vibrate.</td></tr>
@@ -239,7 +250,7 @@ footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);color:v
 </details>
 <details>
   <summary>I got a new phone</summary>
-  <p>On the old phone, copy your setup (<b>Setup → Share &amp; devices</b>) and your season backup (<b>Logs</b>). Install the app on the new phone, then paste the setup and restore the backup.</p>
+  <p>On the old phone, copy each team’s season backup (<b>Logs</b>; it includes the squad and settings). Install the app on the new phone, then restore them: the first with <b>Add the games + restore squad &amp; settings</b>, the rest with <b>Restore as a new team</b>.</p>
 </details>
 <details>
   <summary>I have more players than can play</summary>
@@ -264,7 +275,7 @@ footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);color:v
 
 <footer>
   <p>Free to use. If it helps your team, you can <a href="https://ko-fi.com/rotationstation" target="_blank" rel="noopener">Buy me a coffee</a>.</p>
-  <p>Rotation Station 2.19.1 · 2026-10-28 · free software under the MIT licence · <a href="./">Open the app</a></p>
+  <p>Rotation Station 2.20.0 · 2026-10-29 · free software under the MIT licence · <a href="./">Open the app</a></p>
 </footer>
 
 </div>
