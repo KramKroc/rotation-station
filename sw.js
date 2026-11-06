@@ -1,5 +1,5 @@
-// Rotation Station service worker — 2.20.0 · 2026-10-29
-const CACHE = 'rotation-2.20.0-2026-10-29';
+// Rotation Station service worker — 2.21.0 · 2026-11-05
+const CACHE = 'rotation-2.21.0-2026-11-05';
 const CORE = ["./","./index.html","./manifest.webmanifest","./icon-180.png","./icon-192.png","./icon-512.png","./guide.html","./shots/glance.png","./shots/live.png","./shots/logs.png","./shots/plan.png","./shots/setup.png","./shots/share.png"];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE)).then(() => self.skipWaiting()));
