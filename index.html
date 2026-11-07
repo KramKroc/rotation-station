@@ -225,6 +225,8 @@ table.pmu th,table.pmu td{padding:6px 5px;font-size:13px}
 .gdr{display:grid;grid-template-columns:1fr 52px;gap:6px}.gdr .gdh{text-align:left;justify-content:flex-start;min-height:46px}
 .gdr .gdh[aria-pressed="true"]{border-color:var(--go)}.gdr.off .gdh{opacity:.55}.gdr .gdh s{text-decoration:none}.gdr.off .gdh s{text-decoration:line-through}
 .gdr .gso{margin-left:auto;padding-left:6px;white-space:nowrap}.gdr .gdwhy{font-size:11px;line-height:1.1;padding:0 2px}
+.qpts td,.qpts th{text-align:center}.qpts td:first-child{text-align:left}.qpts .qtot td{border-top:2px solid var(--line);font-weight:700}
+.gnote{font-size:15px;padding:6px 10px;border-radius:8px;background:var(--panel);border:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:6px 0}.gqt{text-align:center;margin:2px 0 6px}
 .htc{border:1px solid var(--line);border-radius:12px;padding:10px;margin:8px 0;background:var(--panel)}.htr{margin:4px 0;line-height:1.5}
 .gundo{min-height:46px;font-size:15px}
 .barkey{display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:6px}.barkey i{display:inline-block;width:10px;height:6px;border-radius:3px;margin-right:4px;vertical-align:middle}
@@ -543,7 +545,11 @@ function targets(){
   const T=baseTargets(),ids=new Set(availList().map(p=>p.id));
   const ptier=protectedTier();
   Object.entries(S.adj).forEach(([k,ev])=>{const sw=k.startsWith('swap:');if(sw&&!swapLive(ev))return;   // a coach's swap counts only while both are here and in the same tier
-    Object.entries(ev).forEach(([id,m])=>{if(!ids.has(id))return;if(m<0&&!sw&&P(id).tier===ptier&&!P(id).cold)return;   // the lowest tier never lends (but may swap among itself)
+    const skip=(id,m)=>m<0&&!sw&&P(id).tier===ptier&&!P(id).cold;   // the lowest tier never lends (but may swap among itself)
+    // a loan the lowest tier no longer pays (the lender was moved down a tier after lending) shrinks the bonus to match,
+    // or the core floor and rebalancing would take it from other lowest-tier players
+    const gone=sum(Object.entries(ev).filter(([id,m])=>ids.has(id)&&skip(id,m)).map(([,m])=>-m)),pos=sum(Object.values(ev).filter(m=>m>0)),f=gone&&pos?Math.max(0,(pos-gone)/pos):1;
+    Object.entries(ev).forEach(([id,m])=>{if(!ids.has(id)||skip(id,m))return;if(m>0&&f<1)m=Math.floor(m*f*2+1e-9)/2;
     T[id]=Math.max(0,T[id]+m)})});
   const cu=catchUp();Object.entries(cu.give).forEach(([id,m])=>T[id]+=m);Object.entries(cu.take).forEach(([id,m])=>T[id]=Math.max(0,T[id]-m));
   // Passerelle: a group of exactly five plays the whole of its quarter, so that's the least they can finish on
@@ -1180,12 +1186,14 @@ function clearSeason(){seasonSave({v:1,games:[]});S.archived=false;save();render
 function importGame(text,date,opp,us,them){
   const players=[],lines=String(text||'').split(/\r?\n/);
   const csvHead=lines.findIndex(l=>/^Jersey,Name,Tier,Target_Mins,Actual_Mins/.test(l));
-  if(csvHead>=0){lines.slice(csvHead+1).forEach(l=>{const m=l.match(/^(\d+),"((?:[^"]|"")*)",(\d),([\d.]+),([\d.]+),[-\d.]+,(.*)$/);if(!m)return;
-    const rest=m[6].split(',');players.push({num:+m[1],name:m[2].replace(/""/g,'"'),tier:+m[3],tgt:+m[4],mins:+m[5],fouls:+rest[rest.length-2]||0})})}
+  if(csvHead>=0){const fi=lines[csvHead].split(',').indexOf('Fouls')-6;
+    lines.slice(csvHead+1).forEach(l=>{const m=l.match(/^(\d+),"((?:[^"]|"")*)",(\d),([\d.]+),([\d.]+),[-\d.]+,(.*)$/);if(!m)return;
+    const rest=m[6].split(',');players.push({num:+m[1],name:m[2].replace(/""/g,'"'),tier:+m[3],tgt:+m[4],mins:+m[5],fouls:+rest[fi>=0?fi:rest.length-2]||0})})}
   else lines.forEach(l=>{const m=l.match(/#(\d+)\s+(.+?)\s+\(T(\d)\):\s*([\d.]+)m\s*\/\s*tgt\s*([\d.]+)m.*?F:(\d)/);if(m){players.push({num:+m[1],name:m[2],tier:+m[3],mins:+m[4],tgt:+m[5],fouls:+m[6]});return}
     const q=l.match(/^•\s*#(\d+)\s+(.+?):\s*([\d.]+)m\s*\|.*?F:(\d)/);   // the parents' version: tier from the squad, and the target is taken as what they played, so season catch-up neither adds nor takes away
     if(q){const sp=S.roster.find(p=>p.num===+q[1]);players.push({num:+q[1],name:q[2],tier:sp?sp.tier:4,mins:+q[3],tgt:+q[3],fouls:+q[4]})}});
   if(!players.length)return 0;
+  players.forEach(p=>p.name=p.name.replace(/ \(Capt\.\)$/,''));
   if(!date){const dm=String(text).match(/📅\s*([\d/]+)/);date=dm?dm[1]:today()}
   if(!opp){const om=String(text).match(/\|\s*vs\s+([^|\n]+)/);opp=om?om[1].trim():''}
   const se=seasonLoad();se.games.push({id:'imp'+Date.now().toString(36)+se.games.length,date,opp,us:+us||0,them:+them||0,scored:!!(+us||+them),imported:true,players});seasonSave(se);
@@ -1193,7 +1201,7 @@ function importGame(text,date,opp,us,them){
 }
 // backup: the season, the squad and the settings as one text block to paste somewhere safe (WhatsApp, the project)
 function backupText(){
-  const o={v:1,app:APP_VERSION,made:new Date().toISOString(),team:tfull(),season:seasonLoad(),roster:S.roster.map(p=>({id:p.id,num:p.num,name:p.name,tier:p.tier,active:p.active,starter:!!p.starter,bh:!!p.bh})),config:S.config,closersIds:S.closersIds};
+  const o={v:1,app:APP_VERSION,made:new Date().toISOString(),team:tfull(),season:seasonLoad(),roster:S.roster.map(p=>({id:p.id,num:p.num,name:p.name,tier:p.tier,active:p.active,starter:!!p.starter,bh:!!p.bh,capt:!!p.capt})),config:S.config,closersIds:S.closersIds};
   return 'PUMAS-BACKUP-1:'+btoa(unescape(encodeURIComponent(JSON.stringify(o))));
 }
 function readBackup(text){
@@ -1216,7 +1224,7 @@ function restoreBackup(text,squad){
 }
 // Setup = squad + team + every setting, without the season: for a second device or an assistant coach
 function setupText(){
-  const o={v:1,kind:'setup',app:APP_VERSION,made:new Date().toISOString(),roster:S.roster.map(p=>({id:p.id,num:p.num,name:p.name,tier:p.tier,active:p.active,starter:!!p.starter,bh:!!p.bh})),config:S.config,closersIds:S.closersIds};
+  const o={v:1,kind:'setup',app:APP_VERSION,made:new Date().toISOString(),roster:S.roster.map(p=>({id:p.id,num:p.num,name:p.name,tier:p.tier,active:p.active,starter:!!p.starter,bh:!!p.bh,capt:!!p.capt})),config:S.config,closersIds:S.closersIds};
   return 'PUMAS-SETUP-1:'+btoa(unescape(encodeURIComponent(JSON.stringify(o))));
 }
 function readSetup(text){
@@ -1229,7 +1237,7 @@ function applySetup(text){
   if(!o){const b=readBackup(text);if(b&&Array.isArray(b.roster)&&b.roster.length){o=b;fromBackup=true}}
   if(!o)return null;if(S.started)return {err:'started'};
   const seen=new Set();
-  S.roster=o.roster.filter(p=>p&&p.id!=null&&!seen.has(String(p.id))&&seen.add(String(p.id))).map(p=>({id:String(p.id),num:Math.max(0,parseInt(p.num,10)||0),name:String(p.name||'').slice(0,40)||('#'+(p.num??'?')),tier:[1,2,3,4].includes(+p.tier)?+p.tier:2,active:p.active!==false,starter:!!p.starter,bh:!!p.bh,hot:false,cold:false}));
+  S.roster=o.roster.filter(p=>p&&p.id!=null&&!seen.has(String(p.id))&&seen.add(String(p.id))).map(p=>({id:String(p.id),num:Math.max(0,parseInt(p.num,10)||0),name:String(p.name||'').slice(0,40)||('#'+(p.num??'?')),tier:[1,2,3,4].includes(+p.tier)?+p.tier:2,active:p.active!==false,starter:!!p.starter,bh:!!p.bh,capt:!!p.capt,hot:false,cold:false}));
   S.roster.forEach(p=>st(p.id));
   S.config={...DEF_CFG,...o.config,tierMins:{...DEF_CFG.tierMins,...(o.config||{}).tierMins}};
   devApply();S.closersIds=(o.closersIds||[]).filter(id=>S.roster.some(p=>p.id===id));S.plan={};S.fixed={};S.applied={};S.halves={};S.pinned={};S.moves={};S.adj={};
@@ -1256,12 +1264,20 @@ function seasonCsv(){
 
 /* rotation card for an assistant: the plan as plain text */
 const shortName=p=>'#'+(p.num??'?')+' '+String(p.name).split(/\s+/).slice(-1)[0];
+const captOf=()=>S.roster.find(p=>p.capt)||null;
+const captTag=p=>p&&p.capt?' (Capt.)':'';   // added after the name where it's shown, never stored in it
+// points by quarter, from the score log (each score records its quarter): quarters so far, or all of them at full time
+function qRows(upto){const Q=scoreByQ(),n=Math.min(Q.length,upto||(S.finished?Q.length:S.period));return Q.slice(0,n).map((q,i)=>({l:qLabel(i+1),us:q.us,them:q.them,m:q.us-q.them}))}
+const sgn=v=>v>0?'+'+v:v<0?'−'+(-v):'0';
+function qTable(rows,totLabel){if(!rows.length)return '';const t={us:sum(rows.map(r=>r.us)),them:sum(rows.map(r=>r.them))};
+  return `<div class="tbl"><table class="qpts"><thead><tr><th></th><th>${esc(tn())}</th><th>${esc(oppName())}</th><th>Margin</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r.l}</td><td>${r.us}</td><td>${r.them}</td><td class="trk ${r.m>0?'ok':r.m<0?'way':''}">${sgn(r.m)}</td></tr>`).join('')}<tr class="qtot"><td>${totLabel||'Total'}</td><td>${t.us}</td><td>${t.them}</td><td><b>${sgn(t.us-t.them)}</b></td></tr></tbody></table></div>`}
 function rotationCard(){
   const B=blocksAll(),now=elapsedAbs(),T=targets(),fut=B.filter(b=>b.abs1>now);
   const nm=ids=>ids.map(id=>shortName(P(id))).join(', ');
   let t='🏀 '+tfull().toUpperCase()+' — ROTATION PLAN'+(S.match.opp?' vs '+S.match.opp:'')+' · '+S.match.date+'\n';
   t+=S.config.shiftLength+'-min blocks'+(S.config.miniSubs?' + mini subs':'')+' · sub on the dead ball nearest each time · keep '+S.config.strongFloor+'+ core on court\n';
   if(pText())t+=pText()+'\n';
+  if(captOf())t+='Captain: '+shortName(captOf())+'\n';
   if(S.started)t+='(from '+clockLabel()+', current five: '+nm(S.onCourtIds)+')\n';
   t+='------------------------------------\n';
   let prev=S.started?S.onCourtIds.slice():null;
@@ -1491,7 +1507,7 @@ function waText(full){
   t+='------------------------------------\n';
   (full?exportRows():exportRows().sort((x,y)=>(x.p.num??999)-(y.p.num??999))).forEach(r=>{
     const qs=S.periods.map((_,i)=>mt((r.s.periodSplit[i]||0)/60)).join('/');
-    t+='• #'+r.p.num+' '+r.p.name+(full?' (T'+r.p.tier+'): '+m1(r.a)+'m / tgt '+m1(r.T)+'m':': '+m1(r.a)+'m')+' | Qs ['+qs+'] | F:'+r.s.fouls+(r.s.fouledOut?' (OUT)':'')+'\n';
+    t+='• #'+r.p.num+' '+r.p.name+captTag(r.p)+(full?' (T'+r.p.tier+'): '+m1(r.a)+'m / tgt '+m1(r.T)+'m':': '+m1(r.a)+'m')+' | Qs ['+qs+'] | F:'+r.s.fouls+(r.s.fouledOut?' (OUT)':'')+'\n';
   });
   if(S.config.passerelle&&regMins()){const p1=S.roster.filter(p=>pIn(p.id,1)),p2=S.roster.filter(p=>pIn(p.id,2)),both=p1.filter(p=>pIn(p.id,2));if(p1.length||p2.length)t+='🔁 Passerelle: Q1 '+p1.map(p=>'#'+(p.num??'?')).join(' ')+' · Q2 '+p2.map(p=>'#'+(p.num??'?')).join(' ')+(both.length?' · ⚠ played both: '+both.map(p=>'#'+(p.num??'?')).join(' '):'')+'\n'}
   {const np=S.roster.filter(p=>p.np&&!p.active&&played(p.id)===0);if(np.length)t+='🪑 Not picked: '+np.map(p=>'#'+(p.num??'?')+' '+p.name).join(', ')+'\n'}
@@ -1502,6 +1518,7 @@ function csvText(){
   const per=S.periods.map((_,i)=>i<4?'P'+(i+1):'OT'+(i-3));
   const PM=plusMinus().pm,PB=pointsBy();let t='Jersey,Name,Tier,Target_Mins,Actual_Mins,Delta_Mins,'+per.join(',')+',Fouls,FouledOut,PlusMinus,Points\n';
   exportRows().forEach(r=>{t+=[r.p.num,'"'+r.p.name.replace(/"/g,'""')+'"',r.p.tier,m1(r.T),m1(r.a),m1(r.a-r.T),...S.periods.map((_,i)=>m1((r.s.periodSplit[i]||0)/60)),r.s.fouls,r.s.fouledOut?'Y':'N',PM[r.p.id]||0,PB[r.p.id]||0].join(',')+'\n'});
+  if(S.score.ev.length){const Q=qRows(S.periods.length);t+='\nQuarter,Us,Them,Margin\n'+Q.map(r=>[r.l,r.us,r.them,r.m].join(',')).join('\n')+'\nTotal,'+S.score.us+','+S.score.them+','+(S.score.us-S.score.them)+'\n'}   // the import reads player rows only
   return t;
 }
 // Copy: try the old-style copy first (works inside the claude.ai frame and most phones), then the clipboard API,
@@ -1580,6 +1597,7 @@ function viewGlance(){
   }
   return `<div class="glance">
     <div class="gtop"><span>${qLabel(S.period)}</span><span class="sp"></span>${S.started&&!S.finished?(ui.awake!=='none'?'<span class="trk ok">☀</span>':'<button class="chip warn" data-act="sheet:awake">⚠ May sleep</button>'):''}<span class="${tfUs()>=5?'trk way':tfUs()===4?'trk short':''}">TF ${tfUs()}</span><button class="btn sm ghost" data-act="glance:0" aria-label="Back to the full screen">✕ Full view</button></div>
+    ${S.match.note?`<div class="gnote">📋 ${esc(S.match.note)}</div>`:''}
     <button class="gclock ${running?'run':'stop'}" data-act="clock" data-lp="resync" aria-label="Game clock"><div class="digits">${mmss(S.clockSeconds)}</div><div class="state">${st0}</div></button>
     ${(()=>{const r=S.started&&!S.finished?runAgainst():null;return r?`<div class="gwarn">${esc(oppName())} on a ${r.pts}–0 run (${r.n} straight). Timeout at the next dead ball? <button class="btn sm" data-act="to:us" ${toLeft('us')>0?'':'disabled'}>⏱ Call timeout (${toLeft('us')} left)</button></div>`:''})()}
     ${fd?`<div class="gwarn">${esc(shortName(P(fd.id)))} is on 4 fouls${fd.rep?` — <button class="btn sm" data-act="fdsub:${fd.id}:${fd.rep}">Sub ${esc(shortName(P(fd.rep)))} in</button>`:''}</div>`:''}
@@ -1587,7 +1605,9 @@ function viewGlance(){
     ${S.started&&!S.finished?`<div class="gpanel">
       <div class="gsrow"><span class="gsl"><span>${esc(tn())}</span><b>${S.score.us}</b></span><button class="btn gm" data-act="scm:us" ${S.score.us?'':'disabled'} aria-label="${esc(tn())} minus 1">−1</button><button class="btn" data-act="gsc:us:1">+1</button><button class="btn" data-act="gsc:us:2">+2</button><button class="btn" data-act="gsc:us:3">+3</button></div>
       <div class="gsrow"><span class="gsl"><span>${esc(oppName())}</span><b>${S.score.them}</b></span><button class="btn gm" data-act="scm:them" ${S.score.them?'':'disabled'} aria-label="${esc(oppName())} minus 1">−1</button><button class="btn" data-act="gsc:them:1">+1</button><button class="btn" data-act="gsc:them:2">+2</button><button class="btn" data-act="gsc:them:3">+3</button></div>
+      ${S.score.ev.length?`<div class="gqt muted small">${qRows().map(r=>r.l+' '+r.us+'–'+r.them).join(' · ')}</div>`:''}
       ${scorerStrip()}
+      ${(()=>{const c=captOf();return c&&availList().includes(c)&&!S.onCourtIds.includes(c.id)?`<div class="muted small">Captain ${esc(shortName(c))} is on the bench: name a floor captain.</div>`:''})()}
       <div class="gfl"><span class="muted small">Foul on</span>${S.onCourtIds.map(id=>{const f=st(id).fouls;return `<button class="btn gf ${f>=4?'bad':f>=3?'warn':''}" data-act="foul:${id}" data-lp="foulm:${id}"><b>#${P(id).num??'?'}</b><em>${esc(String(P(id).name).split(/\s+/).slice(-1)[0])}</em><span>F${f}</span></button>`}).join('')}<button class="btn gf" data-act="tft:1" data-lp="tfm:1" aria-label="${esc(oppName())} foul, hold to take one off">Their foul<span>TF ${tfThem()}</span></button></div>
       <div class="gtools"><button class="btn" data-act="sheet:to">⏱ Timeout<span>${toLeft('us')} left</span></button><button class="btn" data-act="resync">⚙ Resync<span>clock</span></button><button class="btn" data-act="break">⏩ Break<span>end quarter</span></button></div>
       <button class="btn gundo" data-act="undo" ${S.undo.length?'':'disabled'}>↩ Undo${S.undo.length?' '+esc(undoLabel()):''}</button></div>`:''}
@@ -1701,6 +1721,8 @@ function halfTimeCard(){
   const nm=p=>esc(shortName(p));
   const PG=pGroups(),no=PG?pIds(PG,0):[];
   return `<div class="htc">
+    ${S.match.note?`<div class="htr"><b>Game plan:</b> ${esc(S.match.note)}</div>`:''}
+    ${S.score.ev.length?`<div class="htr"><b>Points by quarter</b>${qTable(qRows(2),'1st half')}</div>`:''}
     ${PG?`<div class="htr"><b>Passerelle:</b> ${no.length?`<span class="trk way">${no.map(id=>nm(P(id))).join(', ')} didn’t play the 1st half, so can’t play the 2nd</span>`:'<span class="trk ok">everyone played the 1st half, so anyone can play the 2nd</span>'}</div>`:''}
     <div class="htr"><b>Minutes:</b> ${short.length?short.map(x=>`<span class="trk ${x.t.cls}">${nm(x.p)} will finish ${m1(-x.t.d)} short</span>`).join(' · '):'<span class="trk ok">the plan finishes everyone within a minute of target</span>'}${toCome.length?`<br><span class="muted small">Bigger 2nd half for: ${toCome.map(x=>nm(x.p)+' '+m1(x.m)+' of the '+m1(half2)+' min left ('+m1(x.so)+' so far)').join(' · ')} — worth telling them now.</span>`:''}</div>
     <div class="htr"><b>Fouls:</b> ${fouls.length?fouls.map(p=>`<span class="${st(p.id).fouls>=3?'trk way':'trk short'}">${nm(p)} F${st(p.id).fouls}</span>`).join(' · ')+(fouls.some(p=>st(p.id).fouls>=3)?' <span class="muted small">— 3 by half-time: be careful</span>':''):'<span class="muted">nobody on 2+</span>'} · team fouls reset now</div>
@@ -1711,7 +1733,7 @@ function halfTimeCard(){
 function rotationSheet(){
   const T=targets(),B=blocksAll(),PG=pGroups(),rows=S.roster.filter(p=>p.active&&!st(p.id).fouledOut).sort((a,b)=>a.tier-b.tier||a.num-b.num);
   const head='<th>#</th><th>Player</th><th>T</th>'+B.map(b=>`<th class="${b.s===0&&!b.half?'q':''}">${b.half===2?'↳':''}${qLabel(b.p)}<br>${mmssShort(S.periods[b.p-1]-b.s)}${inLockBlock(b)?' 🔒':''}</th>`).join('')+'<th>Target</th><th>Fouls</th>';
-  const body=rows.map(p=>`<tr><td><b>${p.num}</b></td><td class="n">${esc(p.name)}${p.bh?' (BH)':''}${S.closersIds.includes(p.id)?' ©':''}${PG?' · '+({1:'Q1',2:'Q2',0:'no 2nd half'})[PG.g[p.id]]:''}</td><td>${p.tier}</td>`+B.map(b=>{const on=(S.plan[b.key]||[]).includes(p.id);return `<td class="${on?'on':''} ${b.s===0&&!b.half?'q':''}">${on?'●':''}</td>`}).join('')+`<td>${m1(T[p.id]||0)}</td><td class="boxes">☐☐☐☐☐</td></tr>`).join('');
+  const body=rows.map(p=>`<tr><td><b>${p.num}</b></td><td class="n">${esc(p.name)}${esc(captTag(p))}${p.bh?' (BH)':''}${S.closersIds.includes(p.id)?' ©':''}${PG?' · '+({1:'Q1',2:'Q2',0:'no 2nd half'})[PG.g[p.id]]:''}</td><td>${p.tier}</td>`+B.map(b=>{const on=(S.plan[b.key]||[]).includes(p.id);return `<td class="${on?'on':''} ${b.s===0&&!b.half?'q':''}">${on?'●':''}</td>`}).join('')+`<td>${m1(T[p.id]||0)}</td><td class="boxes">☐☐☐☐☐</td></tr>`).join('');
   const q=S.periods.slice(0,4).map((_,i)=>`<tr><td>Q${i+1}</td><td class="boxes">☐☐☐☐ ☐</td><td class="boxes">☐☐☐☐ ☐</td></tr>`).join('');
   return `<div class="pbar"><button data-act="printgo">🖨 Print</button><button class="g" data-act="printclose">Close</button></div>
   <h1>${esc(tfull())}${S.match.opp?' vs '+esc(S.match.opp):''}</h1>
@@ -1858,7 +1880,7 @@ function pmSection(){
 }
 function viewLogs(){
   const L=S.subLogs.slice().reverse().map(l=>`<div class="${l.kind==='rp'?'rp':''}"><span class="t">${l.time}</span>${esc(l.text)}</div>`).join('')||'<div class="muted">No events yet.</div>';
-  return `${S.finished&&S.match.practice?'<div class="banner lock">Practice match — not saved to the season. <button class="btn sm" data-act="archive">Save it anyway</button></div>':''}${pmSection()}<h2>Sub log</h2><div class="log">${L}</div>
+  return `${S.finished&&S.match.practice?'<div class="banner lock">Practice match — not saved to the season. <button class="btn sm" data-act="archive">Save it anyway</button></div>':''}${S.score.ev.length?'<h2>Points by quarter</h2>'+qTable(qRows()):''}${pmSection()}<h2>Sub log</h2><div class="log">${L}</div>
   ${(()=>{const t=seasonTable();
     const head=`<div class="hline"><h2>Season</h2>${S.started&&!S.archived&&!S.match.practice?'<button class="btn sm" data-act="archive">Save this game</button>':''}<button class="btn sm ghost" data-act="sheet:import">+ Past game</button>${t?'<button class="btn sm ghost" data-act="sheet:season">Manage</button>':''}</div>`;
     if(!t)return head+'<div style="margin-top:8px"><button class="btn ghost" data-act="sheet:restore">Restore from a backup</button></div><p class="note">Games are saved here at full time, so you can see minutes across the season. Add earlier games from their CSV or WhatsApp summary.</p>';
@@ -2051,12 +2073,15 @@ function renderSheet(){
     const rows=S.roster.slice().sort((a,b)=>a.tier-b.tier||a.num-b.num),nS=S.roster.filter(p=>p.starter&&p.active).length,nA=availList().length,mx=panelMax(),over=panelOver(),so=satOut();
     h=`<h2>Game-day setup</h2><p class="muted small" style="margin-top:-6px">${esc(tfull())}${TM.ids.length>1?' · <button class="btn sm ghost" data-act="sheet:teams">Switch team</button>':''}</p>
     <div class="grid2"><input class="inp" type="text" data-chg="opp" value="${esc(S.match.opp)}" placeholder="Opponent"><input class="inp" type="text" data-chg="date" value="${esc(S.match.date)}"></div>
+    <input class="inp" type="text" data-chg="note" maxlength="140" value="${esc(S.match.note||'')}" placeholder="Game plan (optional), e.g. Slow their #3 early" aria-label="Game plan note" style="width:100%;margin-top:8px">
+    <p class="muted small" style="margin:4px 0 0">One line for you: shown on the glance screen and the half-time card. Not in the WhatsApp summary.</p>
     <div class="seg" style="margin-top:8px"><button data-act="practice:0" aria-pressed="${!S.match.practice}">Game</button><button data-act="practice:1" aria-pressed="${!!S.match.practice}">Practice</button></div>
     <p class="small" style="margin:10px 0 4px"><b>Who's here?</b> Tap to mark in or out · <b>S</b> = starter <span class="chip ${nS===5?'go':'warn'}">Starters ${nS}/5</span> <span class="chip ${over?'warn':'acc'}">${mx&&S.roster.length>mx?`${nA} of ${S.roster.length} picked${over?' · limit '+mx:''}`:nA+' here'}</span></p>
     ${noNum().length?`<p class="note" style="color:var(--warn)">⚠ ${esc(noNum().map(p=>p.name).join(', '))} need${noNum().length===1?'s':''} a shirt number before tip-off (Setup → Squad &amp; tiers).</p>`:''}
     ${over?`<p class="note">Only ${mx} can play (Setup → Squad). Mark ${nA-mx} as not picked. “Sat out” counts this season’s games each player wasn’t picked.</p>`:''}
     <div class="gdl">${rows.map(p=>`<div class="gdr ${p.active?'':'off'}"><button class="btn gdh" data-act="gdhere:${p.id}" aria-pressed="${p.active}">${p.active?'✓':'✕'} <b>#${p.num??'?'}</b> <s>${esc(p.name)}</s> <span class="tier t${p.tier}">T${p.tier}</span>${so[p.num]?`<span class="muted small gso">sat out ${so[p.num]}</span>`:''}</button>${p.active||S.started?`<button class="tog c" data-act="gdstart:${p.id}" aria-pressed="${!!p.starter&&p.active}" ${p.active?'':'disabled'}>S</button>`:`<button class="tog c gdwhy" data-act="gdnp:${p.id}" aria-label="${p.np?'Not picked, tap for not here':'Not here, tap for not picked'}">${p.np?'Not<br>picked':'Not<br>here'}</button>`}</div>`).join('')}</div>
     ${S.started?'<p class="note">The game has started: marking someone out now counts as an injury (their minutes so far are kept).</p>':''}
+    <div class="field" style="margin-top:10px"><label for="captsel">Captain</label><select id="captsel" data-chg="capt"><option value="">None</option>${S.roster.slice().sort((a,b)=>(a.num??999)-(b.num??999)).map(p=>`<option value="${p.id}" ${p.capt?'selected':''}>#${p.num??'?'} ${esc(p.name)}</option>`).join('')}</select><span class="muted small">Shown as (Capt.) on the rotation sheet, the rotation card and the summary. The glance screen says when they’re on the bench, so you can name a floor captain.</span></div>
     ${S.config.passerelle?pGroupsHtml():''}
     ${swapList().length?`<p class="small" style="margin:10px 0 4px"><b>Court-time swaps</b> (this game · make them on the Plan tab)</p><div class="stack">${swapList().map(w=>`<button class="btn ghost" data-act="swapclr:${w.k}">#${P(w.a).num??'?'} ⇄ #${P(w.b).num??'?'} · Undo</button>`).join('')}</div>`:''}
     <button class="btn pri" style="width:100%;margin-top:10px" data-act="close">Done${nS===5||S.started?'':' (pick 5 starters)'}${over?` · ${nA} picked, limit ${mx}`:''}</button>`;
@@ -2087,7 +2112,7 @@ function resync(delta,abs){
 }
 
 /* ---------- debug trace: every engine action + what the app believed afterwards ---------- */
-const APP_VERSION='2.22.0 · 2026-11-07';
+const APP_VERSION='2.23.0 · 2026-11-07';
 let dbgDepth=0;
 function dbgInit(){S.debug={app:APP_VERSION,created:new Date().toISOString(),start:{config:JSON.parse(JSON.stringify(S.config)),roster:JSON.parse(JSON.stringify(S.roster)),closersIds:S.closersIds.slice(),periods:S.periods.slice()},ev:[]}}
 const ids2n=a=>(a||[]).map(id=>{const p=P(id);return p?p.num:id});
@@ -2307,6 +2332,8 @@ document.addEventListener('input',e=>{const f=e.target.dataset&&e.target.dataset
 document.addEventListener('change',e=>{
   const c=e.target.dataset.chg;if(!c)return;const [k,id]=c.split(':'),v=e.target.value;
   if(k==='opp')S.match.opp=v;else if(k==='date')S.match.date=v;
+  else if(k==='note')S.match.note=v.trim().slice(0,140);
+  else if(k==='capt'){S.roster.forEach(p=>{p.capt=p.id===v});render()}   // one captain per team
   else if(k==='cfgtxt'&&(id==='teamName'||id==='teamFull'))S.config[id]=v.slice(0,40);
   else if(k==='name')P(id).name=v.trim()||P(id).name;
   else if(k==='num'){const r=setNum(id,v);if(r){e.target.value=P(id).num??'';toast(r,0,0,5000)}else render()}
