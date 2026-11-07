@@ -275,10 +275,13 @@ h3.grp{margin:20px 2px 4px;font-size:14px}
 .field label{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 .seg{display:flex;gap:4px;flex-wrap:wrap}
 .seg button{min-height:44px;min-width:48px;padding:0 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);font-weight:700}
+.seg button:disabled{opacity:.4}
 .seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 /* plan grid */
 .pg td,.pg th{padding:4px 5px;text-align:center}
 .pg td:first-child,.pg th:first-child{text-align:left;position:sticky;left:0;background:var(--panel);z-index:1}
+.pnm{background:none;border:0;padding:0;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.pnm b{text-decoration:underline dotted;text-underline-offset:3px}
 .cell{display:block;width:22px;height:22px;border-radius:5px;margin:auto;background:transparent;border:1px solid var(--line)}
 .cell.f1{background:var(--t1);border-color:var(--t1)}.cell.f2{background:var(--t2);border-color:var(--t2)}.cell.f3{background:var(--t3);border-color:var(--t3)}.cell.f4{background:var(--t4);border-color:var(--t4)}
 .past .cell{opacity:.35}
@@ -345,7 +348,7 @@ function freshMatch(prev){
   return {schemaVersion:2,config:prev?{...DEF_CFG,...prev.config,tierMins:{...DEF_CFG.tierMins,...prev.config.tierMins}}:{...DEF_CFG,tierMins:{...DEF_CFG.tierMins}},roster,
     closersIds:prev?prev.closersIds.slice():SEED_CLOSERS.map(n=>'p'+n),
     periods:Array(4).fill(qLen(prev)),period:1,clockSeconds:qLen(prev),clockRunning:false,lastTickTime:Date.now(),
-    started:false,finished:false,pausedAt:null,onCourtIds:[],plan:{},fixed:{},applied:{},halves:{},pinned:{},moves:{},stats,adj:{},subLogs:[],undo:[],score:{us:0,them:0,ev:[]},tos:[],archived:false,foulAck:{},tf:{},tfThem:{},lineSecs:{},pgrp:{},
+    started:false,finished:false,pausedAt:null,onCourtIds:[],plan:{},fixed:{},applied:{},halves:{},pinned:{},moves:{},stats,adj:{},subLogs:[],undo:[],score:{us:0,them:0,ev:[]},tos:[],archived:false,foulAck:{},tf:{},tfThem:{},lineSecs:{},pgrp:{},swapSt:{},qGrid:{},
     match:{opp:prev?prev.match.opp:'',date:today(),id:'g'+Date.now().toString(36),practice:false}};
 }
 // a new team starts with ten unnumbered players on equal minutes; the coach names and numbers them and sets tiers
@@ -360,7 +363,7 @@ function loadState(id){try{const raw=localStorage.getItem(teamKeys(id).m);if(raw
 let S=loadState(TM.cur)||(TM.cur==='t1'?freshMatch():blankTeam());
 function normState(){
 S.config=(c=>{if(c&&c.foulAware===true)c.foulAware='gentle';if(c&&c.foulAware===false)c.foulAware='off';return c})(S.config||{});
-S.config={...DEF_CFG,...S.config,tierMins:{...DEF_CFG.tierMins,...(S.config||{}).tierMins}};S.fixed=S.fixed||{};S.applied=S.applied||{};S.halves=S.halves||{};S.pinned=S.pinned||{};S.moves=S.moves||{};S.score=S.score||{us:0,them:0,ev:[]};S.foulAck=S.foulAck||{};S.undo=Array.isArray(S.undo)?S.undo:[];S.subLogs=Array.isArray(S.subLogs)?S.subLogs:[];S.adj=S.adj||{};S.pgrp=S.pgrp||{};S.plan=S.plan||{};S.tos=S.tos||[];S.tf=S.tf||{};S.lineSecs=S.lineSecs||{};if(S.roster.every(p=>p.bh===undefined))S.roster.forEach(p=>p.bh=SEED_BH.includes(p.num));S.tfThem=S.tfThem||{};if(!S.match.id)S.match.id='g'+Date.now().toString(36);
+S.config={...DEF_CFG,...S.config,tierMins:{...DEF_CFG.tierMins,...(S.config||{}).tierMins}};S.fixed=S.fixed||{};S.applied=S.applied||{};S.halves=S.halves||{};S.pinned=S.pinned||{};S.moves=S.moves||{};S.score=S.score||{us:0,them:0,ev:[]};S.foulAck=S.foulAck||{};S.undo=Array.isArray(S.undo)?S.undo:[];S.subLogs=Array.isArray(S.subLogs)?S.subLogs:[];S.adj=S.adj||{};S.qGrid=S.qGrid||{};S.pgrp=S.pgrp||{};S.plan=S.plan||{};S.tos=S.tos||[];S.tf=S.tf||{};S.lineSecs=S.lineSecs||{};if(S.roster.every(p=>p.bh===undefined))S.roster.forEach(p=>p.bh=SEED_BH.includes(p.num));S.tfThem=S.tfThem||{};if(!S.match.id)S.match.id='g'+Date.now().toString(36);
 }
 normState();
 const ui={tab:S.started?'live':'setup',pendingOut:null,sheet:null,sheetId:null,lpFired:false,lpUp:0,hotConfirm:null};
@@ -539,8 +542,9 @@ function catchUp(){
 function targets(){
   const T=baseTargets(),ids=new Set(availList().map(p=>p.id));
   const ptier=protectedTier();
-  Object.values(S.adj).forEach(ev=>Object.entries(ev).forEach(([id,m])=>{if(!ids.has(id))return;if(m<0&&P(id).tier===ptier&&!P(id).cold)return;   // the lowest tier never lends
-    T[id]=Math.max(0,T[id]+m)}));
+  Object.entries(S.adj).forEach(([k,ev])=>{const sw=k.startsWith('swap:');if(sw&&!swapLive(ev))return;   // a coach's swap counts only while both are here and in the same tier
+    Object.entries(ev).forEach(([id,m])=>{if(!ids.has(id))return;if(m<0&&!sw&&P(id).tier===ptier&&!P(id).cold)return;   // the lowest tier never lends (but may swap among itself)
+    T[id]=Math.max(0,T[id]+m)})});
   const cu=catchUp();Object.entries(cu.give).forEach(([id,m])=>T[id]+=m);Object.entries(cu.take).forEach(([id,m])=>T[id]=Math.max(0,T[id]-m));
   // Passerelle: a group of exactly five plays the whole of its quarter, so that's the least they can finish on
   const G=pGroups(),pf={};
@@ -602,13 +606,19 @@ function shiftHint(qm,sl){
   if(!even(sl)){const b=[4,3,2].find(x=>x!==sl&&even(x));if(b)t+=` ${b} min would split the quarter evenly.`}
   return t;
 }
+// a quarter keeps the block grid it was played on (shift length, closers lock), so a change at a break only reshapes the quarters to come
+const qGridOf=p=>((S.qGrid||{})[p])||{step:S.config.shiftLength*60,lock:+S.config.closerLockSeconds||0};
+function qGridRec(){if(S.period<=4&&!(S.qGrid=S.qGrid||{})[S.period])S.qGrid[S.period]={step:S.config.shiftLength*60,lock:+S.config.closerLockSeconds||0}}
+// settings that set the block grid can't change while a quarter is under way: they'd move the next change under the coach
+const GRID_KEYS=['shiftLength','closerLockSeconds','miniSubs'];
+const qUnderway=()=>S.started&&!S.finished&&S.clockSeconds>0&&S.clockSeconds<len();
 function baseBlocks(){
-  const out=[],step=S.config.shiftLength*60;let abs=0;
+  const out=[];let abs=0;
   S.periods.forEach((L,pi)=>{
     const p=pi+1;
     if(p>4){out.push({p,s:0,e:L,dur:L,abs0:abs,abs1:abs+L,key:p+'-0'})}
     else{
-      const lockAt=p===4&&S.config.closerLockSeconds>0?Math.max(0,L-S.config.closerLockSeconds):L;
+      const g=qGridOf(p),step=g.step,lockAt=p===4&&g.lock>0?Math.max(0,L-g.lock):L;
       const cuts=shiftCuts(lockAt,step);
       if(lockAt<L)cuts.push(lockAt);
       // a coach can move a change earlier/later; the block keeps its original key so plans and pins survive the move
@@ -637,13 +647,18 @@ function blocksAll(halves){
   return out;
 }
 const blockLabel=b=>qLabel(b.p)+' '+mmssShort(S.periods[b.p-1]-b.s)+'–'+mmssShort(S.periods[b.p-1]-b.e);
-function inLockBlock(b){const L=S.config.closerLockSeconds;if(!L)return false;if(b.p===4)return b.s>=S.periods[3]-L;if(b.p>4)return S.config.lockOT;return false}
+function inLockBlock(b){const L=b.p===4?qGridOf(4).lock:S.config.closerLockSeconds;if(!L)return false;if(b.p===4)return b.s>=S.periods[3]-L;if(b.p>4)return S.config.lockOT;return false}
 
 // ball-handler floor, limited to how many tagged ball-handlers are available
 // the lowest tier's ball-handlers count only if nobody else can do it (forcing them on would cost the other lowest-tier players minutes)
 function bhPool(){const av=availList(),pt=protectedTier(),hi=av.filter(p=>p.bh&&!(pt>=3&&p.tier===pt));return hi.length?hi:av.filter(p=>p.bh)}
 const isBHp=p=>!!p&&bhPool().includes(p);
 function bhFloorEff(){const f=+S.config.bhFloor||0;return Math.min(f,bhPool().length)}
+// T1 floor, limited to what the T1s' targets pay for: keeping that many T1s on all game mustn't put them, on average,
+// more than half a block past their targets (2 T1s on 19.5 of 28 min can cover a floor of 1, not 2: that would be all game)
+function t1FloorEff(T){const f=+S.config.t1Floor||0;if(!f)return 0;T=T||targets();
+  const t1=availList().filter(p=>p.tier===1),game=sum(S.periods)/60,have=sum(t1.map(p=>T[p.id]||0));
+  let e=Math.min(f,t1.length);while(e>0&&(e*game-have)/t1.length>S.config.shiftLength/2+1e-9)e--;return e}
 function solvePlan(halves,T,fine){   // fine: the final plan, polished (choosing mini subs compares the quick version)
   const B=blocksAll(halves),now=elapsedAbs(),av=availList(),ids=new Set(av.map(p=>p.id));
   let plan=JSON.parse(JSON.stringify(S.plan)),R={};const oldPlan=S.plan;
@@ -662,7 +677,7 @@ function solvePlan(halves,T,fine){   // fine: the final plan, polished (choosing
     const starters=S.roster.filter(p=>p.starter&&ids.has(p.id)&&cp(p.id,1)).map(p=>p.id).slice(0,5);
     if(starters.length)forced[fut[0].key]=starters;
   }
-  const firstKey=fut[0]&&fut[0].key,floor=S.config.strongFloor,t1Floor=+S.config.t1Floor||0,bhF=bhFloorEff(),bhSet=new Set(bhPool().map(p=>p.id)),isBH=id=>bhSet.has(id);
+  const firstKey=fut[0]&&fut[0].key,floor=S.config.strongFloor,t1Floor=t1FloorEff(T),bhF=bhFloorEff(),bhSet=new Set(bhPool().map(p=>p.id)),isBH=id=>bhSet.has(id);
   const pt0=protectedTier(),lowT=S.config.spreadLow&&pt0>=3?pt0:0,LOWPEN=450;   // keep the lowest tier (T4s) on court one at a time where possible
   // fair-share pacing: score = minutes still owed minus what they'd still be owed if they were exactly on pace
   const isLock=b=>lockKeys.has(b.key);
@@ -703,8 +718,9 @@ function solvePlan(halves,T,fine){   // fine: the final plan, polished (choosing
       if(base.length===5){
         const sc={};av.forEach(p=>sc[p.id]=scoreOf(p));
         const strongBase=base.filter(id=>tierOf(id)<=2).length,t1Base=base.filter(id=>tierOf(id)===1).length;
-        let best=null,gain=30;                  // only worth a sub if it closes at least 30s of gap
-        base.forEach(o=>{if(P(o).hot&&b.abs0<(P(o).hotUntil||0))return;
+        const bad=G&&nElig(b.p)>=5?base.filter(id=>!cp(id,b.p)):[];   // Passerelle: a locked lineup with someone the rule bars: the mini sub takes them off
+        let best=null,gain=bad.length?-Infinity:30;                  // only worth a sub if it closes at least 30s of gap
+        base.forEach(o=>{if(bad.length&&!bad.includes(o))return;if(!bad.length&&P(o).hot&&b.abs0<(P(o).hotUntil||0))return;
           av.forEach(p=>{if(base.includes(p.id)||!cp(p.id,b.p))return;
             const strong=strongBase-(tierOf(o)<=2)+(p.tier<=2);
             if(strong<Math.min(floor,strongBase))return;
@@ -1016,7 +1032,7 @@ function startClock(){ui.nudge=null;
   if(S.finished||S.clockSeconds<=0)return;
   if(S.onCourtIds.length<5&&!S.started){toast('Need 5 on court to tip off');return}
   if(!S.started&&noNum().length){toast('Give '+noNum().map(p=>p.name).join(', ')+' a shirt number first (Setup → Squad & tiers)',0,0,6000);return}
-  S.lastTickTime=Date.now();S.clockRunning=true;S.pausedAt=null;
+  S.lastTickTime=Date.now();S.clockRunning=true;S.pausedAt=null;qGridRec();
   if(!S.started){const b0=blocksAll()[0];if(b0){S.fixed[b0.key]=S.onCourtIds.slice();S.applied[b0.key]=1}   // the starting five is what's on court; never re-pick it
     {const G=pGroups();if(G){pSnap(G);S.onCourtIds.forEach(id=>S.pgrp[id]=1)}}   // Passerelle: the groups stay as they were at tip-off
     S.started=true;log('Tip-off — starters: '+S.onCourtIds.map(id=>'#'+(P(id).num??'?')).join(' '))}
@@ -1166,7 +1182,9 @@ function importGame(text,date,opp,us,them){
   const csvHead=lines.findIndex(l=>/^Jersey,Name,Tier,Target_Mins,Actual_Mins/.test(l));
   if(csvHead>=0){lines.slice(csvHead+1).forEach(l=>{const m=l.match(/^(\d+),"((?:[^"]|"")*)",(\d),([\d.]+),([\d.]+),[-\d.]+,(.*)$/);if(!m)return;
     const rest=m[6].split(',');players.push({num:+m[1],name:m[2].replace(/""/g,'"'),tier:+m[3],tgt:+m[4],mins:+m[5],fouls:+rest[rest.length-2]||0})})}
-  else lines.forEach(l=>{const m=l.match(/#(\d+)\s+(.+?)\s+\(T(\d)\):\s*([\d.]+)m\s*\/\s*tgt\s*([\d.]+)m.*?F:(\d)/);if(m)players.push({num:+m[1],name:m[2],tier:+m[3],mins:+m[4],tgt:+m[5],fouls:+m[6]})});
+  else lines.forEach(l=>{const m=l.match(/#(\d+)\s+(.+?)\s+\(T(\d)\):\s*([\d.]+)m\s*\/\s*tgt\s*([\d.]+)m.*?F:(\d)/);if(m){players.push({num:+m[1],name:m[2],tier:+m[3],mins:+m[4],tgt:+m[5],fouls:+m[6]});return}
+    const q=l.match(/^•\s*#(\d+)\s+(.+?):\s*([\d.]+)m\s*\|.*?F:(\d)/);   // the parents' version: tier from the squad, and the target is taken as what they played, so season catch-up neither adds nor takes away
+    if(q){const sp=S.roster.find(p=>p.num===+q[1]);players.push({num:+q[1],name:q[2],tier:sp?sp.tier:4,mins:+q[3],tgt:+q[3],fouls:+q[4]})}});
   if(!players.length)return 0;
   if(!date){const dm=String(text).match(/📅\s*([\d/]+)/);date=dm?dm[1]:today()}
   if(!opp){const om=String(text).match(/\|\s*vs\s+([^|\n]+)/);opp=om?om[1].trim():''}
@@ -1258,7 +1276,7 @@ function rotationCard(){
   });
   t+='\n------------------------------------\nPlanned minutes:\n';
   const planned=id=>{let x=played(id);B.forEach(b=>{if(b.abs1<=now)return;if((S.plan[b.key]||[]).includes(id))x+=b.abs0>=now?b.dur:b.abs1-now});return x/60};
-  availList().slice().sort((a,b)=>a.tier-b.tier||a.num-b.num).forEach(p=>{t+='• '+shortName(p)+' (T'+p.tier+') '+mt(planned(p.id))+' min\n'});
+  availList().slice().sort((a,b)=>(a.num??999)-(b.num??999)).forEach(p=>{t+='• '+shortName(p)+' '+mt(planned(p.id))+' min\n'});   // shirt-number order, no tiers: the card gets passed round the bench
   t+='\nTimeouts: 2 first half, 3 second half (max 2 in last 2:00), 1 per OT.';
   return t;
 }
@@ -1390,6 +1408,54 @@ function setCold(id){
   replan();save();
 }
 
+/* ---------- court-time swap (this game only) ---------- */
+// The coach swaps two same-tier players' planned slots for the rest of the game: A takes B's blocks and B takes A's,
+// and nothing else in the plan moves. Their targets move by the difference, kept in S.adj as 'swap:a:b' → {a:−d, b:+d},
+// so the swapped plan is on target and later re-plans keep it while it's still legal. The tier's total doesn't change,
+// and the season records the new targets, so catch-up won't pay it back. Locked lineups and the closers lock stay put.
+const swapKey=(a,b)=>'swap:'+[a,b].sort().join(':');
+function swapLive(ev){const ids=Object.keys(ev),av=new Set(availList().map(p=>p.id));return ids.length===2&&ids.every(id=>av.has(id))&&P(ids[0]).tier===P(ids[1]).tier}
+function swapMates(id){const p=P(id),G=pGroups();return p?availList().filter(q=>q.id!==id&&q.tier===p.tier&&(!G||G.g[q.id]===G.g[id])):[]}   // Passerelle: same group only
+function swapList(id){return Object.entries(S.adj).filter(([k,ev])=>k.startsWith('swap:')&&(!id||id in ev)).map(([k,ev])=>{const [,a,b]=k.split(':');return {k,a,b,d:ev[b]}})}
+function swapNet(id){return swapList(id).reduce((t,g)=>t+(S.adj[g.k][id]||0),0)}
+function swapBlocks(){const now=elapsedAbs();return blocksAll().filter(b=>b.abs0>=now&&!S.fixed[b.key]&&!inLockBlock(b))}
+function slotsOf(id){return swapBlocks().filter(b=>(S.plan[b.key]||[]).includes(id))}
+function slotText(bs){   // back-to-back blocks merged, a whole quarter as just "Q1"
+  const runs=[];bs.forEach(b=>{const r=runs[runs.length-1];if(r&&r.p===b.p&&r.e===b.s)r.e=b.e;else runs.push({p:b.p,s:b.s,e:b.e})});
+  return runs.map(r=>r.s===0&&r.e===S.periods[r.p-1]?qLabel(r.p):qLabel(r.p)+' '+mmssShort(S.periods[r.p-1]-r.s)+'–'+mmssShort(S.periods[r.p-1]-r.e)).join(', ')}
+function keptOf(id){const now=elapsedAbs();return blocksAll().filter(b=>b.abs0>=now&&(S.fixed[b.key]||inLockBlock(b))&&(S.plan[b.key]||[]).includes(id))}   // slots a swap leaves alone
+// why a swap can't be made ('' if it can): it mustn't leave a block short of ball-handlers, or the next re-plan would undo it
+// or push a change past the change limit (the blocks either side of the swapped ones don't move, so the change into them can grow)
+function swapWhy(a,b){const f=bhFloorEff(),K=+S.config.maxSubs||0,sw=new Set(swapBlocks().map(x=>x.key)),G=pGroups(),now=elapsedAbs();
+  const nu=x=>{const lu=S.plan[x.key]||[];return sw.has(x.key)?lu.map(id=>id===a?b:id===b?a:id):lu};
+  if(f)for(const x of swapBlocks()){const lu=S.plan[x.key]||[];if(lu.includes(a)===lu.includes(b))continue;
+    const n0=lu.filter(id=>isBHp(P(id))).length,n1=nu(x).filter(id=>isBHp(P(id))).length;
+    if(n1<Math.min(f,n0))return `${blockLabel(x)} would have ${n1?'only '+n1:'no'} ball-handler${n1===1?'':'s'} on court (the floor is ${f}).`}
+  if(K){let p0=S.started?S.onCourtIds.slice():null,p1=p0;
+    for(const x of blocksAll().filter(x=>x.abs0>=now)){const l0=S.plan[x.key]||[],l1=nu(x);
+      if(p0&&p0.length===5&&!S.fixed[x.key]&&!inLockBlock(x)&&(x.s!==0||S.config.maxSubsBreaks!==false)&&!(G&&x.p<=2)){
+        const c0=l0.filter(id=>!p0.includes(id)).length,c1=l1.filter(id=>!p1.includes(id)).length;
+        if(c1>K&&c1>c0)return `the change at ${blockLabel(x).split('–')[0]} would be ${c1} players (the change limit is ${K}).`}
+      p0=l0;p1=l1}}
+  return ''}
+function swapSlots(a,b){
+  if(!P(a)||!P(b)||a===b||!swapMates(a).some(q=>q.id===b)||swapWhy(a,b))return false;
+  let da=0;   // seconds a hands to b
+  swapBlocks().forEach(x=>{const lu=S.plan[x.key];if(!lu)return;const ia=lu.includes(a),ib=lu.includes(b);if(ia===ib)return;S.plan[x.key]=lu.map(id=>id===a?b:id===b?a:id);da+=ia?x.dur:-x.dur});
+  const k=swapKey(a,b),had=!!S.adj[k],x=(had?S.adj[k][b]:0)+da/60,pa=P(a),pb=P(b);
+  if(!S.started&&!pa.starter!==!pb.starter){[pa.starter,pb.starter]=[pb.starter,pa.starter];S.swapSt=S.swapSt||{};if(S.swapSt[k])delete S.swapSt[k];else S.swapSt[k]=1}   // the starting spot swaps too
+  if(!S.started){const f=blocksAll()[0];if(f)S.onCourtIds=(S.plan[f.key]||[]).slice()}
+  if(had&&Math.abs(x)<1e-9)delete S.adj[k];else S.adj[k]={[a]:-x,[b]:x};   // the same pair again swaps back
+  S.planSig=planSig();   // the swapped plan is the plan: no re-solve
+  log(clockLabel()+' — RE-PLAN: '+tag(a)+' and '+tag(b)+' swap court time'+(da?' ('+tag(da>0?b:a)+' +'+mt(Math.abs(da)/60)+'m)':'')+' (coach’s swap)','rp');save();return true;
+}
+function swapClear(k){if(!S.adj[k])return;const [,a,b]=k.split(':');delete S.adj[k];
+  if(!S.started&&S.swapSt&&S.swapSt[k]&&P(a)&&P(b)){const pa=P(a),pb=P(b);[pa.starter,pb.starter]=[pb.starter,pa.starter]}if(S.swapSt)delete S.swapSt[k];
+  log(clockLabel()+' — RE-PLAN: swap '+tag(a)+' ⇄ '+tag(b)+' undone, back to the app’s plan','rp');replan();save()}
+function swapDropAll(why){const ks=Object.keys(S.adj).filter(k=>k.startsWith('swap:'));if(!ks.length)return 0;   // a settings change re-plans everyone, so the swapped slots no longer exist
+  ks.forEach(k=>{const [,a,b]=k.split(':');delete S.adj[k];if(!S.started&&S.swapSt&&S.swapSt[k]&&P(a)&&P(b)){const pa=P(a),pb=P(b);[pa.starter,pb.starter]=[pb.starter,pa.starter]}});S.swapSt={};
+  log(clockLabel()+' — RE-PLAN: '+why+' changed, so '+(ks.length===1?'the court-time swap was':'the '+ks.length+' court-time swaps were')+' cleared','rp');return ks.length}
+
 /* ---------- periods ---------- */
 function openBreak(){ui.sheet='break'}
 function startNextPeriod(){
@@ -1414,16 +1480,18 @@ function leagueCheck(){
   const avg=a=>sum(a)/a.length;
   return {top:avg(mins.slice(0,4)),bottom:avg(mins.slice(-4)),normTop:20*regMins()/32,normBottom:9.5*regMins()/32,n:mins.length};
 }
-function waText(){
+// full=false (the default) is the parents' version: no tiers, no target minutes, players in shirt-number order,
+// so nobody can read a ranking off it. The coaches' version (full=true) has tiers and targets.
+function waText(full){
   const n=S.periods.length-4;
   let t='🏀 '+tfull().toUpperCase()+' — MINUTES & SUBS LOG'+(S.match.practice?' (PRACTICE)':'')+'\n📅 '+S.match.date+(S.match.opp?' | vs '+S.match.opp:'')+' | ⏱ '+mt(regMins())+' min regulation'+(n>0?' + '+n+' OT':'')+'\n';
   if(scoreLine())t+='🏆 '+scoreLine()+' · by quarter '+scoreByQ().map(q=>q.us+'–'+q.them).join(', ')+'\n';
   {const PB=pointsBy(),ks=Object.keys(PB).sort((a,b)=>PB[b]-PB[a]);if(ks.length){const un=S.score.ev.filter(e=>e.side==='us'&&!e.by).reduce((t,e)=>t+e.pts,0);t+='🏀 Scoring: '+ks.map(id=>shortName(P(id)).replace(/^#\d+ /,'')+' '+PB[id]).join(', ')+(un?' (+'+un+' not logged)':'')+'\n'}}
   if(S.tos.length)t+='⏱ Timeouts: '+tn()+' '+S.tos.filter(x=>x.side==='us').length+', '+oppName()+' '+S.tos.filter(x=>x.side==='them').length+'\n';
   t+='------------------------------------\n';
-  exportRows().forEach(r=>{
+  (full?exportRows():exportRows().sort((x,y)=>(x.p.num??999)-(y.p.num??999))).forEach(r=>{
     const qs=S.periods.map((_,i)=>mt((r.s.periodSplit[i]||0)/60)).join('/');
-    t+='• #'+r.p.num+' '+r.p.name+' (T'+r.p.tier+'): '+m1(r.a)+'m / tgt '+m1(r.T)+'m | Qs ['+qs+'] | F:'+r.s.fouls+(r.s.fouledOut?' (OUT)':'')+'\n';
+    t+='• #'+r.p.num+' '+r.p.name+(full?' (T'+r.p.tier+'): '+m1(r.a)+'m / tgt '+m1(r.T)+'m':': '+m1(r.a)+'m')+' | Qs ['+qs+'] | F:'+r.s.fouls+(r.s.fouledOut?' (OUT)':'')+'\n';
   });
   if(S.config.passerelle&&regMins()){const p1=S.roster.filter(p=>pIn(p.id,1)),p2=S.roster.filter(p=>pIn(p.id,2)),both=p1.filter(p=>pIn(p.id,2));if(p1.length||p2.length)t+='🔁 Passerelle: Q1 '+p1.map(p=>'#'+(p.num??'?')).join(' ')+' · Q2 '+p2.map(p=>'#'+(p.num??'?')).join(' ')+(both.length?' · ⚠ played both: '+both.map(p=>'#'+(p.num??'?')).join(' '):'')+'\n'}
   {const np=S.roster.filter(p=>p.np&&!p.active&&played(p.id)===0);if(np.length)t+='🪑 Not picked: '+np.map(p=>'#'+(p.num??'?')+' '+p.name).join(', ')+'\n'}
@@ -1485,6 +1553,7 @@ function card(p,T,on,ctx){
   if(ctx.next.includes(p.id))b.push('<span class="chip go">Next on</span>');
   const rl=(+S.config.restMaxMins||0)*60;if(on&&S.started&&rl&&s.consecutiveSeconds>=rl)b.push(`<span class="chip warn">Needs a rest · ${mmssShort(s.consecutiveSeconds)} on</span>`);
   if(S.closersIds.includes(p.id))b.push('<span class="chip acc">Closer</span>');
+  if(swapList(p.id).length)b.push(`<span class="chip acc">⇄ swapped</span>`);
   if(!on&&!S.finished){const G=pGroups(),q=subPeriod();if(G&&q<=4&&!canPlay(G,p.id,q))b.push(`<span class="chip warn">${q===1?'Q2 group':q===2?'Played Q1':'No 1st half'}</span>`)}
   let btn;
   if(on)btn=`<button class="act out" data-act="out:${p.id}">${pending?'Cancel':'OUT'}</button>`;
@@ -1534,7 +1603,7 @@ function viewLive(){
   const lock=inLockLive();
   const rl=(+S.config.restMaxMins||0)*60,tired=p=>rl&&st(p.id).consecutiveSeconds>=rl?1:0;
   const dueRank=on.filter(p=>!p.hot).sort((a,b)=>(b.cold-a.cold)||(tired(b)-tired(a))||(foulRisk(b.id)-foulRisk(a.id))||(pace(b.id)-pace(a.id)));
-  const strongOn=on.filter(p=>p.tier<=2).length,floor=S.config.strongFloor,t1On=on.filter(p=>p.tier===1).length,t1F=+S.config.t1Floor||0;
+  const strongOn=on.filter(p=>p.tier<=2).length,floor=S.config.strongFloor,t1On=on.filter(p=>p.tier===1).length,t1F=t1FloorEff();
   const nextRank=bench.slice().sort((a,b)=>(a.cold-b.cold)||(foulRisk(a.id)-foulRisk(b.id))||(pace(a.id)-pace(b.id)));
   let next=nextRank[0];
   if(dueRank[0]&&dueRank[0].tier<=2&&strongOn<=floor){const s=nextRank.find(p=>p.tier<=2);if(s)next=s}
@@ -1657,20 +1726,21 @@ function openPrint(){const el=document.getElementById('printv');if(!el)return;el
 function closePrint(){const el=document.getElementById('printv');if(el){el.hidden=true;el.innerHTML=''}}
 function viewPlan(){
   const T=targets(),B=blocksAll(),now=elapsedAbs(),PG=pGroups();
-  const rows=S.roster.filter(p=>p.active||played(p.id)>0).sort((a,b)=>a.tier-b.tier||b.num-a.num);
+  const rows=S.roster.filter(p=>p.active||played(p.id)>0).sort((a,b)=>a.tier-b.tier||b.num-a.num),swapOk=!S.finished;
   const planned=id=>{let s=played(id);B.forEach(b=>{if(b.abs1<=now)return;const pl=S.plan[b.key]||[];if(pl.includes(id))s+=b.abs0>=now?b.dur:b.abs1-now});return s/60};
   const cls=b=>(b.abs1<=now?'past ':'')+(b.abs0<now&&now<b.abs1?'curcol':'');
   const head='<th>Player</th>'+B.map(b=>`<th class="${cls(b)} ${b.half===2?'halfcol':''}"><button class="bh" data-act="blk:${b.key}" aria-label="Edit ${blockLabel(b)}">${inLockBlock(b)?'🔒':''}${S.pinned[b.key]?'📌':''}${b.half===2?'↳ ':''}${qLabel(b.p)}<br><span class="muted small">${mmssShort(S.periods[b.p-1]-b.s)}${S.moves[b.key]?'*':''}</span></button></th>`).join('')+'<th>Tgt</th><th>Plan</th><th>Δ</th>';
   const body=rows.map(p=>{
     const pl=planned(p.id),d=pl-(T[p.id]||0);
-    return `<tr><td><b>#${p.num??'?'}</b> ${esc(p.name)} <span class="tier t${p.tier}">T${p.tier}</span>${PG&&p.id in PG.g?` <span class="muted small">${({1:'Q1',2:'Q2',0:'no 2nd half'})[PG.g[p.id]]}</span>`:''}</td>`+B.map(b=>`<td class="${cls(b)}"><span class="cell ${(S.plan[b.key]||[]).includes(p.id)?'f'+p.tier:''}"></span></td>`).join('')+
+    const nm=`<b>#${p.num??'?'}</b> ${esc(p.name)} <span class="tier t${p.tier}">T${p.tier}</span>${swapList(p.id).length?' <span class="chip acc">⇄</span>':''}`;
+    return `<tr><td>${swapOk&&swapMates(p.id).length?`<button class="pnm" data-act="swap:${p.id}" aria-label="Swap court time for #${p.num??'?'}">${nm}</button>`:nm}${PG&&p.id in PG.g?` <span class="muted small">${({1:'Q1',2:'Q2',0:'no 2nd half'})[PG.g[p.id]]}</span>`:''}</td>`+B.map(b=>`<td class="${cls(b)}"><span class="cell ${(S.plan[b.key]||[]).includes(p.id)?'f'+p.tier:''}"></span></td>`).join('')+
     `<td>${m1(T[p.id]||0)}</td><td>${m1(pl)}</td><td class="${Math.abs(d)>S.config.shiftLength/2+0.01?'lowcore':'muted'}">${d>=0?'+':''}${m1(d)}</td></tr>`}).join('');
-  const t1row='<tr><td class="muted">T1s on</td>'+B.map(b=>{const c=(S.plan[b.key]||[]).filter(id=>tierOf(id)===1).length;return `<td class="${cls(b)} ${c<(+S.config.t1Floor||0)?'lowcore':'muted'}">${c}</td>`}).join('')+'<td></td><td></td><td></td></tr>';
+  const t1F=t1FloorEff(T),t1row='<tr><td class="muted">T1s on</td>'+B.map(b=>{const c=(S.plan[b.key]||[]).filter(id=>tierOf(id)===1).length;return `<td class="${cls(b)} ${c<t1F?'lowcore':'muted'}">${c}</td>`}).join('')+'<td></td><td></td><td></td></tr>';
   const bhrow=bhFloorEff()?'<tr><td class="muted">Ball-handlers</td>'+B.map(b=>{const c=(S.plan[b.key]||[]).filter(id=>isBHp(P(id))).length;return `<td class="${cls(b)} ${c<bhFloorEff()?'lowcore':'muted'}">${c}</td>`}).join('')+'<td></td><td></td><td></td></tr>':'';
   const core='<tr><td class="muted">Core (T1+T2)</td>'+B.map(b=>{const c=(S.plan[b.key]||[]).filter(id=>tierOf(id)<=2).length;return `<td class="${cls(b)} ${c<S.config.strongFloor?'lowcore':'muted'}">${c}</td>`}).join('')+'<td></td><td></td><td></td></tr>';
   return `<h2>Rotation plan</h2>${coreWarn()?`<div class="banner pause fdb"><span>⚠ ${esc(coreWarn())}</span><div class="pbtns"><button class="btn sm" data-act="cfg:strongFloor:${coreShort(baseTargets()).floor-1}">Set core floor to ${coreShort(baseTargets()).floor-1}</button></div></div>`:''}
   <div class="legend"><span>↳ = mini sub (one change mid-block)</span><span><i style="background:var(--t1)"></i>T1 Core</span><span><i style="background:var(--t2)"></i>T2 Rotation</span><span><i style="background:var(--t3)"></i>T3 Development</span><span><i style="background:var(--t4)"></i>T4 Emerging</span><span>🔒 Closers block</span><span>📌 Lineup you locked</span><span>* Change time moved</span></div>
-  <p class="note" style="margin-top:0">Tap a block's time to lock its lineup or move the change earlier or later.${PG?` <b>Passerelle:</b> Q1 group ${PG.n1}, Q2 group ${PG.n2} (change them on the <button class="btn sm ghost" data-act="sheet:gameday">Game-day sheet</button>).`:''}</p>${pShort()?`<p class="note" style="color:var(--warn)">⚠ ${esc(pShort())}</p>`:''}
+  <p class="note" style="margin-top:0">${S.finished?'':`<button class="btn sm" data-act="swap">⇄ Swap court time</button> Tap a player’s name to swap their slots with a teammate in the same tier. `}Tap a block's time to lock its lineup or move the change earlier or later.${PG?` <b>Passerelle:</b> Q1 group ${PG.n1}, Q2 group ${PG.n2} (change them on the <button class="btn sm ghost" data-act="sheet:gameday">Game-day sheet</button>).`:''}</p>${pShort()?`<p class="note" style="color:var(--warn)">⚠ ${esc(pShort())}</p>`:''}
   <div class="tbl"><table class="pg"><thead><tr>${head}</tr></thead><tbody>${body}${t1row}${bhrow}${core}</tbody></table></div>
   <h2>Rotation card</h2>
   <p class="note" style="margin-top:0">The plan as plain text for an assistant or the bench. Copy it into WhatsApp before the game; it updates as the plan changes.</p>
@@ -1688,7 +1758,9 @@ function pGroupsHtml(){
   <div class="grid2 pgg">${col(1)}${col(2)}</div>${pIds(G,0).length?`<div class="pgg">${col(0)}</div>`:''}
   <p class="note">${edit?(sel?'Now tap someone in the other group to swap them.':'Tap a player to move them to the other group. Each group needs at least 5. The suggestion splits the tiers and ball-handlers evenly; the Q1 group includes the starting five.'):'Groups are set by who has played. Anyone who didn’t play Q1 or Q2 can’t play the 2nd half; overtime is open to anyone.'}</p>`;
 }
-function seg(key,opts,cur,fmt){return `<div class="seg">${opts.map(o=>`<button data-act="cfg:${key}:${o}" aria-pressed="${cur===o}">${fmt?fmt(o):o}</button>`).join('')}</div>`}
+function seg(key,opts,cur,fmt){const off=GRID_KEYS.includes(key)&&qUnderway();return `<div class="seg">${opts.map(o=>`<button data-act="cfg:${key}:${o}" aria-pressed="${cur===o}"${off&&cur!==o?' disabled':''}>${fmt?fmt(o):o}</button>`).join('')}</div>`}
+const gridNote=()=>qUnderway()?' <b>Change this at a break.</b>':'';
+const gameOnNote=()=>S.started&&!S.finished?'<p class="note gameon">Game on: changes here re-plan the rest of the game.</p>':'';
 function viewSetup(){
   const T=targets(),c=S.config,CU=catchUp();
   const nStart=S.roster.filter(p=>p.starter&&p.active).length,nClose=S.closersIds.filter(id=>P(id)&&P(id).active).length;
@@ -1703,7 +1775,7 @@ function viewSetup(){
     <td>${p.active&&!st(p.id).fouledOut?m1(T[p.id]||0)+'m'+(CU.give[p.id]?` <span class="trk short small">+${m1(CU.give[p.id])} catch-up</span>`:CU.take[p.id]?` <span class="muted small">−${m1(CU.take[p.id])}</span>`:''):'—'}</td>
     <td>${!S.started||played(p.id)===0?`<button class="tog c" data-act="askdel:${p.id}" aria-label="Remove from squad">✕</button>`:''}</td></tr>`).join('');
   const cw=coreWarn(),onoff=v=>v?'on':'off',anyN=v=>v?String(v):'any';
-  const sec=(id,title,sum,body,warn)=>{const open=secOpen(id)||!!warn;return `<section class="sec${warn?' secwarn':''}"><button class="sechd" data-act="sec:${id}" aria-expanded="${open}"><span class="st">${warn?'⚠ ':''}${title}</span><span class="ss">${sum}</span><span class="chev" aria-hidden="true">${open?'▴':'▾'}</span></button>${open?`<div class="secbd">${body}</div>`:''}</section>`};
+  const sec=(id,title,sum,body,warn)=>{const open=secOpen(id)||!!warn;return `<section class="sec${warn?' secwarn':''}"><button class="sechd" data-act="sec:${id}" aria-expanded="${open}"><span class="st">${warn?'⚠ ':''}${title}</span><span class="ss">${sum}</span><span class="chev" aria-hidden="true">${open?'▴':'▾'}</span></button>${open?`<div class="secbd">${['mins','court','subs','hot'].includes(id)?gameOnNote():''}${body}</div>`:''}</section>`};
   return `<button class="teambar" data-act="sheet:teams" aria-label="Teams: switch or add a team"><span class="tbn">${esc(tfull())}</span><span class="muted small">4×${c.quarterMins}${c.passerelle?' · Passerelle':''} · ${TM.ids.length>1?TM.ids.length+' teams · switch':'add a team'} ▾</span></button>
   <button class="btn pri" style="width:100%;margin:6px 0 10px" data-act="sheet:gameday">⚡ Game-day setup — who's here, starters, opponent</button>
   <h3 class="grp">This team</h3>
@@ -1718,7 +1790,7 @@ function viewSetup(){
     <div class="field"><label>Quarter length</label>${seg('quarterMins',[6,7,8,10],c.quarterMins,o=>o+' min')}<span class="muted small">${S.started?'Locked once the game has started.':'Most youth leagues play 4 × 8. Check yours.'}</span></div>
     <div class="field"><label>Overtime length</label>${seg('otLengthMins',[3,4,5],c.otLengthMins,o=>o+' min')}<span class="muted small">Many youth leagues play 4 minutes. Check yours.</span></div>
     <div class="field"><label>Passerelle rotation</label>${seg('passerelle',[false,true],!!c.passerelle,o=>o?'On':'Off')}<span class="muted small">A rule some leagues use for U12 and U14. Different players in Q1 and Q2 (nobody plays both), and only players who played in the 1st half can play in the 2nd. Overtime is open to anyone. Needs 10 or more players. ${c.passerelle?'Set the two groups on the Game-day sheet.':'Check your league’s rules.'}${S.started?' Locked once the game has started.':''}</span>${pShort()?`<span class="small" style="color:var(--warn)">⚠ ${esc(pShort())}</span>`:''}</div>
-    <div class="field"><label>Shift block</label>${seg('shiftLength',[4,3,2],c.shiftLength,o=>o+' min')}<span class="muted small">${shiftHint(c.quarterMins,c.shiftLength)}</span></div>
+    <div class="field"><label>Shift block</label>${seg('shiftLength',[4,3,2],c.shiftLength,o=>o+' min')}<span class="muted small">${shiftHint(c.quarterMins,c.shiftLength)}${gridNote()}</span></div>
   </div>
   <div class="hline"><h3>Minutes per tier</h3><button class="btn ghost sm" data-act="tmreset" aria-label="Reset tier minutes to 20, 15, 10, 6">↺ 20/15/10/6</button></div>
   <div class="tiers">${[1,2,3,4].map(t=>{const ps=availList().filter(p=>p.tier===t),ex=ps[0];return `<div class="trow"><span class="tier t${t}">T${t}</span><span class="tn">${TIERNAME[t]}<br><span class="muted small">${ps.length} player${ps.length===1?'':'s'}${ex?' · target '+m1(T[ex.id]||0)+'m each':''}</span></span>
@@ -1727,9 +1799,9 @@ function viewSetup(){
   <h3>Season</h3><div class="fields">
     <div class="field"><label>Season catch-up</label>${seg('catchUp',[0,1,2,3],+c.catchUp||0,o=>o?'up to '+o+' min':'Off')}<span class="muted small">Players behind their season minutes get some back this game, taken from T1s first. Practice games don't count.</span></div>
   </div>`)}
-  ${sec('court','Who\'s on court',`core ${c.strongFloor} · T1s ${anyN(c.t1Floor)} · ball-handlers ${anyN(+c.bhFloor)}`,`<div class="fields">
+  ${sec('court','Who\'s on court',`core ${c.strongFloor} · T1s ${anyN(c.t1Floor)}${t1FloorEff()<(+c.t1Floor||0)?' ('+t1FloorEff()+' today)':''} · ball-handlers ${anyN(+c.bhFloor)}`,`<div class="fields">
     <div class="field"><label>Core floor (T1+T2 on court)</label>${seg('strongFloor',[2,3,4],c.strongFloor)}<span class="muted small">At least this many T1/T2 players on court at all times. 3 suits a squad with 6 or fewer core players.</span>${coreWarn()?`<span class="small" style="color:var(--warn)">⚠ ${esc(coreWarn())}</span>`:''}</div>
-    <div class="field"><label>T1s on court, at least</label>${seg('t1Floor',[0,1,2,3],c.t1Floor,o=>o?String(o):'Any')}<span class="muted small">Stops the plan putting out lineups with only one T1. With 4 T1s, 2 fits every block.</span></div>
+    <div class="field"><label>T1s on court, at least</label>${seg('t1Floor',[0,1,2,3],c.t1Floor,o=>o?String(o):'Any')}<span class="muted small">Stops the plan putting out lineups with only one T1. With 4 T1s, 2 fits every block.${(()=>{const e=t1FloorEff(),n=availList().filter(p=>p.tier===1).length;return e<(+c.t1Floor||0)?` <b style="color:var(--warn)">With ${n} T1${n===1?'':'s'} here, the plan keeps ${e||'no'} T1${e===1?'':'s'} on at all times: ${+c.t1Floor} would play ${n===1?'them':'them all'} well past their minutes.</b>`:''})()}</span></div>
     <div class="field"><label>Ball-handlers on court, at least</label>${seg('bhFloor',[0,1,2],+c.bhFloor||0,o=>o?String(o):'Any')}<span class="muted small">Tag with <b>BH</b> in the squad list. Now: ${S.roster.filter(p=>p.bh&&p.active).map(p=>'#'+(p.num??'?')).join(', ')||'nobody tagged'}.</span></div>
     <div class="field"><label>Lowest tier one at a time</label>${seg('spreadLow',[true,false],c.spreadLow,o=>o?'On':'Off')}<span class="muted small">Spreads the T4s out so two are rarely on court together.</span></div>
     <div class="field"><label>Rest guard</label>${seg('restMaxMins',[0,6,8,10],c.restMaxMins,o=>o?o+' min':'Off')}<span class="muted small">Plans around long stints and flags anyone on this long.</span></div>
@@ -1738,8 +1810,8 @@ function viewSetup(){
   ${sec('subs','Subs &amp; closers',`max ${anyN(+c.maxSubs)} at once · mini subs ${c.miniSubs||'off'} · lock ${c.closerLockSeconds?'last '+c.closerLockSeconds/60+':00':'off'}`,`<div class="fields">
     <div class="field"><label>Most players changed at once</label>${seg('maxSubs',[2,3,4,0],+c.maxSubs||0,o=>o?String(o):'Any')}<span class="muted small">Keeps the rest of the five together. 3 is as fair as no limit. 2 adds an extra one-player change when needed.</span></div>
     <div class="field"><label>…at quarter breaks</label>${seg('maxSubsBreaks',[true,false],c.maxSubsBreaks!==false,o=>o?'Same limit':'No limit')}<span class="muted small">Quarter breaks are a natural moment for a bigger change, if you'd rather allow it.</span></div>
-    <div class="field"><label>Mini subs (half-shifts) per quarter</label>${seg('miniSubs',[0,1,2],c.miniSubs,o=>o?String(o):'Off')}<span class="muted small">One mid-block change when it gets someone closer to their minutes.${+c.maxSubs===2&&(c.miniSubs|0)<2?' <b>Using 2</b> while "most changed at once" is 2.':''}</span></div>
-    <div class="field"><label>Closers lock</label>${seg('closerLockSeconds',[0,120,240],c.closerLockSeconds,o=>o?'Last '+o/60+':00':'Off')}<span class="muted small">Your five closers (C in the squad list) play the end of Q4. Changes stop then.</span></div>
+    <div class="field"><label>Mini subs (half-shifts) per quarter</label>${seg('miniSubs',[0,1,2],c.miniSubs,o=>o?String(o):'Off')}<span class="muted small">One mid-block change when it gets someone closer to their minutes.${gridNote()}${+c.maxSubs===2&&(c.miniSubs|0)<2?' <b>Using 2</b> while "most changed at once" is 2.':''}</span></div>
+    <div class="field"><label>Closers lock</label>${seg('closerLockSeconds',[0,120,240],c.closerLockSeconds,o=>o?'Last '+o/60+':00':'Off')}<span class="muted small">Your five closers (C in the squad list) play the end of Q4. Changes stop then.${gridNote()}</span></div>
     <div class="field"><label>Closers in overtime</label>${seg('lockOT',[true,false],c.lockOT,o=>o?'Locked':'Free')}<span class="muted small">Locked: the closers play all of overtime (needs the closers lock on). Free: subs carry on as normal.</span></div>
   </div>`)}
   ${sec('hot','More rules',`hot &amp; cold: bonus ${onoff(c.hotBonusMode)} · cold −${c.coldTrimMins}m`,`<div class="fields">
@@ -1799,8 +1871,10 @@ function viewLogs(){
     <textarea id="seasoncsv" readonly style="position:absolute;left:-9999px;width:1px;height:1px">${esc(seasonCsv())}</textarea>
     <textarea id="backup" readonly style="position:absolute;left:-9999px;width:1px;height:1px">${esc(backupText())}</textarea>
     <p class="note">Season data lives only on this phone. <b>Copy season backup</b> after each game and paste it into WhatsApp or the project, so a lost phone doesn't lose the season. <button class="btn sm ghost" data-act="sheet:restore">Restore</button></p>`})()}
-  <h2>WhatsApp summary</h2><textarea id="wa" readonly>${esc(waText())}</textarea>
-  <div style="margin-top:8px"><button class="btn pri" data-act="copy:wa">Copy for WhatsApp</button></div>
+  <h2>WhatsApp summary</h2><div class="seg"><button data-act="wafull:0" aria-pressed="${!ui.waFull}">For parents</button><button data-act="wafull:1" aria-pressed="${!!ui.waFull}">For coaches</button></div>
+  <p class="note" style="margin-top:6px">${ui.waFull?'Includes tiers and target minutes. Keep it to the coaches.':'Minutes played, quarters, fouls and scoring, in shirt-number order. No tiers or target minutes, so nobody can read a ranking off it.'}</p>
+  <textarea id="wa" readonly>${esc(waText(!!ui.waFull))}</textarea>
+  <div style="margin-top:8px"><button class="btn pri" data-act="copy:wa">Copy for WhatsApp${ui.waFull?' (coaches)':''}</button></div>
   <h2>CSV</h2><textarea id="csv" readonly style="min-height:140px">${esc(csvText())}</textarea>
   <div style="margin-top:8px"><button class="btn" data-act="copy:csv">Copy CSV</button></div>
   <p class="note">All minutes come from the game clock, not the plan. Copy the summary before you start a new match.</p>
@@ -1816,12 +1890,28 @@ function renderSheet(){
     const p=P(ui.sheetId),on=S.onCourtIds.includes(p.id),av=p.active&&!st(p.id).fouledOut;
     h=`<h2>#${p.num??'?'} ${esc(p.name)}</h2><div class="stack">
       ${av?`<button class="btn" data-act="hot:${p.id}">${p.hot?'Clear 🔥 hot':'🔥 Hot — keep them on through the next block'}</button>
-      <button class="btn" data-act="cold:${p.id}">${p.cold?'Clear ❄️ cold':'❄️ Cold — rest them next, trim minutes'}</button>`:''}
+      <button class="btn" data-act="cold:${p.id}">${p.cold?'Clear ❄️ cold':'❄️ Cold — rest them next, trim minutes'}</button>
+      ${!S.finished&&swapMates(p.id).length?`<button class="btn" data-act="swap:${p.id}">⇄ Swap court time with a T${p.tier} teammate</button>`:''}`:''}
+      ${swapList(p.id).map(w=>`<button class="btn ghost" data-act="swapclr:${w.k}">Undo swap #${P(w.a).num??'?'} ⇄ #${P(w.b).num??'?'}</button>`).join('')}
       <div class="grid2"><button class="btn" data-act="foul:${p.id}">Foul +1</button><button class="btn" data-act="foulm:${p.id}" ${st(p.id).fouls?'':'disabled'}>Foul −1</button></div>
       ${S.started?`<div class="muted small" style="margin-top:4px">Minutes played <b>${mmss(played(p.id))}</b> — fix if they were on (or off) longer than the app thinks</div>
       <div class="grid4"><button class="btn" data-act="mins:${p.id}:-60">−1:00</button><button class="btn" data-act="mins:${p.id}:-30">−0:30</button><button class="btn" data-act="mins:${p.id}:30">+0:30</button><button class="btn" data-act="mins:${p.id}:60">+1:00</button></div>`:''}
       <button class="btn ${p.active?'danger':''}" data-act="active:${p.id}">${p.active?'Injured / unavailable':'Back available'}</button>
       <button class="btn ghost" data-act="close">Close</button></div>`;
+  }else if(ui.sheet==='swap'){
+    const g=ui.swap,pm=id=>m1(projMins(id)),dur=id=>sum(slotsOf(id).map(b=>b.dur))/60,sl=id=>{const x=slotsOf(id);return x.length?slotText(x):'no more slots'};
+    const undo=swapList().length?`<p class="small" style="margin:10px 0 4px"><b>Swaps so far</b></p><div class="stack">${swapList().map(w=>`<button class="btn ghost" data-act="swapclr:${w.k}">#${P(w.a).num??'?'} ⇄ #${P(w.b).num??'?'} · Undo</button>`).join('')}</div>`:'';
+    if(!g.a){const from=availList().filter(q=>swapMates(q.id).length).sort((a,b)=>a.tier-b.tier||a.num-b.num);
+      h=`<h2>⇄ Swap court time</h2><p class="muted small" style="margin-top:-6px">Two players in the same tier swap their planned slots for the rest of this game. Nothing else in the plan moves.</p>
+      ${from.length?`<div class="grid2">${from.map(q=>`<button class="btn" data-act="swap:${q.id}">#${q.num??'?'} ${esc(q.name)} <span class="tier t${q.tier}">T${q.tier}</span> <span class="muted" style="white-space:nowrap">plan ${pm(q.id)}m</span></button>`).join('')}</div>`:'<p class="note">Nobody has a teammate in the same tier here.</p>'}
+      ${undo}<div class="stack" style="margin-top:10px"><button class="btn ghost" data-act="close">Close</button></div>`}
+    else{const p=P(g.a),q=g.b&&P(g.b),mates=swapMates(g.a);
+      h=`<h2>⇄ Swap #${p.num??'?'} ${esc(p.name)}’s court time</h2><p class="muted small" style="margin-top:-6px">With another T${p.tier}, for the rest of this game. Nothing else in the plan moves${S.closersIds.length&&S.config.closerLockSeconds?'; the closers lock stays as it is':''}. <button class="btn sm ghost" data-act="swap">Change player</button></p>
+      <p class="small"><b>#${p.num??'?'} now:</b> ${sl(g.a)} <span class="muted">· plan ${pm(g.a)}m</span></p>${[g.a,g.b].filter(Boolean).map(id=>keptOf(id).length?`<p class="muted small" style="margin:2px 0">#${P(id).num??'?'} keeps ${keptOf(id).map(b=>blockLabel(b)+(inLockBlock(b)?' (closers)':' (locked)')).join(', ')}</p>`:'').join('')}
+      <p class="small" style="margin:10px 0 4px"><b>Swap with</b></p><div class="grid2">${mates.map(x=>`<button class="btn ${g.b===x.id?'pri':''}" data-act="swapto:${x.id}">#${x.num??'?'} ${esc(x.name)} <span class="muted" style="white-space:nowrap">plan ${pm(x.id)}m</span></button>`).join('')}</div>
+      ${q?`<p class="small" style="margin-top:10px">#${p.num??'?'} gets <b>${sl(g.b)}</b> → plan <b>${m1(projMins(g.a)-dur(g.a)+dur(g.b))}m</b><br>#${q.num??'?'} gets <b>${sl(g.a)}</b> → plan <b>${m1(projMins(g.b)-dur(g.b)+dur(g.a))}m</b></p>`:''}
+      ${q&&swapWhy(g.a,g.b)?`<p class="note" style="color:var(--warn)">Can’t swap these two: ${esc(swapWhy(g.a,g.b))} Pick someone else.</p>`:''}
+      <div class="stack"><button class="btn pri" data-act="swapgo" ${q&&!swapWhy(g.a,g.b)?'':'disabled'}>Swap${q?' #'+(p.num??'?')+' ⇄ #'+(q.num??'?'):''}</button><button class="btn ghost" data-act="close">Cancel</button></div>${undo}`}
   }else if(ui.sheet==='hot'){
     const h0=ui.hotConfirm;
     h=`<h2>🔥 #${P(h0.id).num} is hot</h2><p>Borrow <b>${mt(h0.got)} min</b> from ${Object.entries(h0.deb).map(([id,m])=>'#'+(P(id).num??'?')+' ('+mt(m)+')').join(', ')}? Nobody drops below ${S.config.devFloorMins} min.</p>
@@ -1968,6 +2058,7 @@ function renderSheet(){
     <div class="gdl">${rows.map(p=>`<div class="gdr ${p.active?'':'off'}"><button class="btn gdh" data-act="gdhere:${p.id}" aria-pressed="${p.active}">${p.active?'✓':'✕'} <b>#${p.num??'?'}</b> <s>${esc(p.name)}</s> <span class="tier t${p.tier}">T${p.tier}</span>${so[p.num]?`<span class="muted small gso">sat out ${so[p.num]}</span>`:''}</button>${p.active||S.started?`<button class="tog c" data-act="gdstart:${p.id}" aria-pressed="${!!p.starter&&p.active}" ${p.active?'':'disabled'}>S</button>`:`<button class="tog c gdwhy" data-act="gdnp:${p.id}" aria-label="${p.np?'Not picked, tap for not here':'Not here, tap for not picked'}">${p.np?'Not<br>picked':'Not<br>here'}</button>`}</div>`).join('')}</div>
     ${S.started?'<p class="note">The game has started: marking someone out now counts as an injury (their minutes so far are kept).</p>':''}
     ${S.config.passerelle?pGroupsHtml():''}
+    ${swapList().length?`<p class="small" style="margin:10px 0 4px"><b>Court-time swaps</b> (this game · make them on the Plan tab)</p><div class="stack">${swapList().map(w=>`<button class="btn ghost" data-act="swapclr:${w.k}">#${P(w.a).num??'?'} ⇄ #${P(w.b).num??'?'} · Undo</button>`).join('')}</div>`:''}
     <button class="btn pri" style="width:100%;margin-top:10px" data-act="close">Done${nS===5||S.started?'':' (pick 5 starters)'}${over?` · ${nA} picked, limit ${mx}`:''}</button>`;
   }else if(ui.sheet==='pbreach'){
     const x=ui.pb||{};
@@ -1996,7 +2087,7 @@ function resync(delta,abs){
 }
 
 /* ---------- debug trace: every engine action + what the app believed afterwards ---------- */
-const APP_VERSION='2.21.0 · 2026-11-05';
+const APP_VERSION='2.22.0 · 2026-11-07';
 let dbgDepth=0;
 function dbgInit(){S.debug={app:APP_VERSION,created:new Date().toISOString(),start:{config:JSON.parse(JSON.stringify(S.config)),roster:JSON.parse(JSON.stringify(S.roster)),closersIds:S.closersIds.slice(),periods:S.periods.slice()},ev:[]}}
 const ids2n=a=>(a||[]).map(id=>{const p=P(id);return p?p.num:id});
@@ -2027,7 +2118,7 @@ function traced(name,fn){return function(...args){
 doSub=traced('doSub',doSub);quickSwap=traced('quickSwap',quickSwap);skipPlanned=traced('skipPlanned',skipPlanned);
 addFoul=traced('addFoul',addFoul);undoFoul=traced('undoFoul',undoFoul);undo=traced('undo',undo);
 startClock=traced('startClock',startClock);pauseClock=traced('pauseClock',pauseClock);resync=traced('resync',resync);
-setActive=traced('setActive',setActive);setNotPicked=traced('setNotPicked',setNotPicked);setHot=traced('setHot',setHot);confirmHot=traced('confirmHot',confirmHot);setCold=traced('setCold',setCold);
+swapSlots=traced('swapSlots',swapSlots);swapClear=traced('swapClear',swapClear);setActive=traced('setActive',setActive);setNotPicked=traced('setNotPicked',setNotPicked);setHot=traced('setHot',setHot);confirmHot=traced('confirmHot',confirmHot);setCold=traced('setCold',setCold);
 startNextPeriod=traced('startNextPeriod',startNextPeriod);pinBlock=traced('pinBlock',pinBlock);addScore=traced('addScore',addScore);callTimeout=traced('callTimeout',callTimeout);importGame=traced('importGame',importGame);unpinBlock=traced('unpinBlock',unpinBlock);moveBoundary=traced('moveBoundary',moveBoundary);adjMins=traced('adjMins',adjMins);addTeamFoulThem=traced('addTeamFoulThem',addTeamFoulThem);scoreMinus=traced('scoreMinus',scoreMinus);setScorer=traced('setScorer',setScorer);addOT=traced('addOT',addOT);endPeriodEarly=traced('endPeriodEarly',endPeriodEarly);fullTime=traced('fullTime',fullTime);
 // Compact trace (pumas-debug-2): each event keeps only what changed since the one before, then the whole thing is
 // gzipped and base64'd so a full game fits a phone clipboard / chat paste. Long traces are split into parts.
@@ -2094,6 +2185,11 @@ function act(a,e){
     case 'foulm':addFoul(id,-1);ui.sheet=null;render();break;
     case 'menu':ui.sheet='menu';ui.sheetId=id;renderSheet();break;
     case 'hot':ui.sheet=null;setHot(id);render();break;
+    case 'swap':{const back=ui.swap?ui.swap.back:ui.sheet==='gameday'?'gameday':null;if(!id){ui.swap={a:null,back};ui.sheet='swap';renderSheet();break}
+      const ms=swapMates(id);ui.swap={a:id,b:ms.length===1?ms[0].id:null,back};ui.sheet='swap';renderSheet();break}
+    case 'swapto':ui.swap.b=id;renderSheet();break;
+    case 'swapgo':{const g=ui.swap,ok=swapSlots(g.a,g.b);ui.sheet=g.back||null;ui.swap=null;render();if(ok)toast('#'+(P(g.a).num??'?')+' ⇄ #'+(P(g.b).num??'?')+' swapped');break}
+    case 'swapclr':swapClear(a.slice(8));render();if(ui.sheet)renderSheet();break;
     case 'cold':ui.sheet=null;setCold(id);render();break;
     case 'hotyes':confirmHot(true);break;
     case 'hotno':confirmHot(false);break;
@@ -2146,7 +2242,7 @@ function act(a,e){
     case 'pin':{const key=a.slice(4);pinBlock(key,ui.draft||[]);ui.sheet=null;ui.draft=null;render();toast('Lineup locked');break}
     case 'unpin':{const key=a.slice(6);unpinBlock(key);ui.draft=null;renderSheet();break}
     case 'mv':{const parts=a.split(':');moveBoundary(parts[1],+parts[2]);renderSheet();break}
-    case 'tm':{const c=S.config.tierMins;c[id]=Math.max(0,Math.min(32,(+c[id]||0)+(+v)));replan();save();render();break}
+    case 'tm':{const c=S.config.tierMins,n=Math.max(0,Math.min(32,(+c[id]||0)+(+v)));const sd=n!==c[id]&&swapDropAll('Tier minutes');c[id]=n;replan();save();render();if(sd)toast('Tier minutes changed · court-time swaps cleared');break}
     case 'break':openBreak();render();break;
     case 'endnow':endPeriodEarly();break;
     case 'nextp':startNextPeriod();break;
@@ -2154,7 +2250,8 @@ function act(a,e){
     case 'fulltime':fullTime();break;
     case 'rs':resync(+id);break;
     case 'rsset':{const m=($('#rsv').value||'').match(/^(\d{1,2}):?(\d{2})$/);if(!m){toast('Type the time like 4:35');break}resync(0,(+m[1])*60+(+m[2]));break}
-    case 'close':ui.sheet=null;ui.hotConfirm=null;ui.draft=null;ui.pb=null;ui.pgSel=null;render();break;
+    case 'close':if(ui.sheet==='swap'&&ui.swap&&ui.swap.back){ui.sheet=ui.swap.back;ui.swap=null;render();break}
+      ui.sheet=null;ui.hotConfirm=null;ui.swap=null;ui.draft=null;ui.pb=null;ui.pgSel=null;render();break;
     case 'scrim':if(e.target.classList.contains('scrim')){ui.sheet=null;ui.hotConfirm=null;render()}break;
     case 'active':ui.sheet=null;setActive(id,!P(id).active);break;
     case 'starter':{const p=P(id);p.starter=!p.starter;{const G=pGroups();if(G&&p.starter&&!S.started&&G.g[id]!==1){pSnap(G);S.pgrp[id]=1}}if(!S.started)replan();save();render();break}
@@ -2162,18 +2259,22 @@ function act(a,e){
     case 'cfg':{let val=v==='true'?true:v==='false'?false:isNaN(+v)?v:+v;
       if(id==='quarterMins'){
         if(S.started){toast('Quarter length can’t change once the game has started');break}
+        const sd=val!==S.config.quarterMins&&swapDropAll('Quarter length');
         S.config.quarterMins=val;S.periods=Array(4).fill(val*60);S.period=1;S.clockSeconds=val*60;S.plan={};S.fixed={};S.applied={};S.halves={};S.pinned={};S.moves={};
-        replan();save();render();toast(val+'-minute quarters · '+(val*4)+' minutes a game');break}
+        replan();save();render();toast(val+'-minute quarters · '+(val*4)+' minutes a game'+(sd?' · swaps cleared':''));break}
       if(id==='passerelle'&&S.started){toast('Passerelle can’t change once the game has started');break}
-      S.config[id]=val;if(DEV_KEYS.includes(id))devStore();replan();save();render();break}
+      if(GRID_KEYS.includes(id)&&qUnderway()&&S.config[id]!==val){toast('Change this at a break: mid-quarter it would move the next change');break}
+      const sd=!DEV_KEYS.includes(id)&&S.config[id]!==val&&swapDropAll('A setting');
+      S.config[id]=val;if(DEV_KEYS.includes(id))devStore();replan();save();render();if(sd)toast('Setting changed · court-time swaps cleared');break}
     case 'addplayer':{let n=1;while(S.roster.some(p=>p.num===n))n++;const pid='x'+Date.now();S.roster.push({id:pid,num:n,name:'New player',tier:4,active:true,hot:false,cold:false,starter:false});st(pid);if(S.started)log(clockLabel()+' — RE-PLAN: #'+n+' added to the squad','rp');ui.sheet=null;replan();save();render();break}
     case 'askreset':ui.sheet='reset';renderSheet();break;
     case 'askfactory':ui.sheet='factory';renderSheet();break;
     case 'factory':S=TM.cur==='t1'?freshMatch():blankTeam(tn());devApply();dbgInit();ui.sheet=null;ui.tab='setup';ui.pendingOut=null;replan();save();render();toast(tfull()+' reset to defaults');break;
     case 'sec':secToggle(id);render();break;
-    case 'tmreset':S.config.tierMins={...DEF_CFG.tierMins};replan();save();render();toast('Tier minutes back to 20 / 15 / 10 / 6');break;
+    case 'tmreset':{const sd=Object.keys(DEF_CFG.tierMins).some(t=>S.config.tierMins[t]!==DEF_CFG.tierMins[t])&&swapDropAll('Tier minutes');S.config.tierMins={...DEF_CFG.tierMins};replan();save();render();toast('Tier minutes back to 20 / 15 / 10 / 6'+(sd?' · swaps cleared':''));break}
     case 'reset':S=freshMatch(S);dbgInit();S.config.tierMins={...S.config.tierMins};ui.sheet=null;ui.tab='live';ui.pendingOut=null;releaseWake();replan();save();render();toast('New match ready — tap the clock to tip off');break;
     case 'copy':copyText(id);break;
+    case 'wafull':ui.waFull=id==='1';render();break;   // not remembered: the summary always opens on the parents' version
     case 'team':if(id===TM.cur){ui.sheet=null;render();break}if(!switchTeam(id)){toast('Finish this game first (full time or New match)');break}render();window.scrollTo(0,0);toast('Now on '+tfull());break;
     case 'ntq':ui.ntQ=+id;{const nm=($('#ntName')||{}).value;renderSheet();const el=$('#ntName');if(el&&nm)el.value=nm}break;
     case 'ntcopy':ui.ntCopy=id==='1';{const nm=($('#ntName')||{}).value;renderSheet();const el=$('#ntName');if(el&&nm)el.value=nm}break;

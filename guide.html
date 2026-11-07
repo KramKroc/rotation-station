@@ -63,7 +63,7 @@ footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);color:v
   <div class="top"><img src="icon-192.png" alt=""><h1>Rotation Station</h1></div>
   <p class="lede">A free phone app for youth basketball coaches. It plans who plays when, so every player gets fair minutes, tells you when to sub, and keeps the score and fouls during the game.</p>
   <div class="row"><a class="btn pri" href="./">Open the app</a></div>
-  <p class="muted">This guide is for version 2.21.0 · 2026-11-05.</p>
+  <p class="muted">This guide is for version 2.22.0 · 2026-11-07.</p>
   <ul class="toc" aria-label="Contents">
     <li><a href="#install">Install</a></li>
     <li><a href="#first">First time</a></li>
@@ -192,6 +192,7 @@ footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);color:v
 <ul>
   <li><b>🔥 Hot</b> keeps them on through the next block.</li>
   <li><b>❄️ Cold</b> rests them at the next change and trims their minutes.</li>
+  <li><b>⇄ Swap court time</b> swaps two players in the same tier: one takes the other’s planned slots for the rest of the game, and nothing else in the plan moves. Use it when you think the other player will do more with those minutes. Before the game, do it on the <b>Plan</b> tab: tap a player’s name, then pick who to swap with. The sheet shows each player’s slots and what they’d get. Before tip-off, the starting spot swaps too. The closers lock stays as it is. The app won’t make a swap that leaves a block without enough ball-handlers or breaks your change limit; it tells you why. Season catch-up won’t pay the minutes back. To undo a swap, use the same menu or Game-day setup. Changing the quarter length, the tier minutes or another planning setting clears your swaps, since everyone’s court time is re-planned; swap again on the new plan if you still want to.</li>
   <li>Fix their minutes if they were on or off longer than the app thinks.</li>
 </ul>
 <p>If someone gets injured, mark them <b>Out</b> in Game-day setup. They keep the minutes they’ve already played, and their remaining minutes are shared out.</p>
@@ -213,7 +214,7 @@ footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);color:v
   <div>
     <p>At full time, go to <b>Logs</b>:</p>
     <ul>
-      <li><b>Copy for WhatsApp</b>: the score and everyone’s minutes, ready to paste to parents or the club.</li>
+      <li><b>Copy for WhatsApp</b>: the score and everyone’s minutes, ready to paste to parents or the club. It opens on <b>For parents</b>: minutes played, quarters, fouls and scoring, in shirt-number order, with no tiers or target minutes, so nobody can read a ranking off it. <b>For coaches</b> adds tiers and targets; keep that one to the coaching staff. The rotation card doesn’t show tiers either.</li>
       <li><b>Copy CSV</b>: the same for a spreadsheet.</li>
       <li><b>Season</b>: games are saved here at full time, so you can see minutes across the season. Players who are behind on minutes are listed at the top. <b>Season catch-up</b> (in Setup) can give them a little more next game.</li>
     </ul>
@@ -275,6 +276,10 @@ footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);color:v
   <p>That’s fine. The app allows a short wait for a dead ball before it calls a change overdue (<b>Setup → Alerts → Counts as on time within</b>). Make the change at the next stoppage and tap <b>Quick swap</b>; the rest of the plan adjusts to the clock.</p>
 </details>
 <details>
+  <summary>Can I change settings during a game?</summary>
+  <p>Most of them, yes. Tier minutes, the floors, the change limit and hot &amp; cold re-plan the rest of the game straight away; Setup says so while a game is on. <b>Shift block</b>, <b>Mini subs</b> and the <b>Closers lock</b> can only change at a break, because mid-quarter they would move the next change under you. A change at a break affects the quarters still to come, and the Plan tab keeps the blocks already played as they were. The quarter length and Passerelle are fixed once the game starts.</p>
+</details>
+<details>
   <summary>Does it follow my league’s rules?</summary>
   <p>The defaults follow common FIBA youth play (4 × 8-minute quarters, 4-minute overtime). You can change the quarter length, overtime and minutes for each tier in Setup. Always check your own league’s rules.</p>
 </details>
@@ -285,7 +290,7 @@ footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);color:v
 
 <footer>
   <p>Free to use. If it helps your team, you can <a href="https://ko-fi.com/rotationstation" target="_blank" rel="noopener">Buy me a coffee</a>.</p>
-  <p>Rotation Station 2.21.0 · 2026-11-05 · free software under the MIT licence · <a href="./">Open the app</a></p>
+  <p>Rotation Station 2.22.0 · 2026-11-07 · free software under the MIT licence · <a href="./">Open the app</a></p>
 </footer>
 
 </div>
