@@ -83,6 +83,9 @@ h3{font-family:var(--display);font-size:16px;letter-spacing:.08em;text-transform
 .plannext.st-ready .ph b{color:var(--accent)}
 .plannext.st-now{border:2px solid var(--go);background:color-mix(in srgb,var(--go) 12%,var(--bg))}
 .plannext.st-now .ph b{color:var(--go)}
+.plannext.st-table{border:2px dashed var(--accent);background:color-mix(in srgb,var(--accent) 8%,var(--bg))}
+.plannext.st-table .ph b{color:var(--accent)}
+.plannext.ask .ph b{font-size:1.1em}
 th.halfcol{background:color-mix(in srgb,var(--accent) 10%,var(--panel))}
 .ph b{font-family:var(--display);letter-spacing:.04em;font-size:18px;text-transform:uppercase}
 .swaps{display:grid;gap:4px}
@@ -193,7 +196,7 @@ table.pmu th,table.pmu td{padding:6px 5px;font-size:13px}
 .glance .gclock .digits{font:800 clamp(72px,26vw,140px)/1 var(--display,system-ui);font-variant-numeric:tabular-nums;letter-spacing:.02em}
 .glance .gclock .state{font-weight:700;font-size:15px;color:var(--muted);margin-top:4px}
 .glance .gnext{border-radius:16px;border:2px solid var(--line);background:var(--panel);padding:12px 14px}
-.glance .gnext.st-ready{border-color:var(--warn)}.glance .gnext.st-now{border-color:var(--go)}.glance .gnext.st-overdue{border-color:var(--bad)}
+.glance .gnext.st-ready{border-color:var(--warn)}.glance .gnext.st-now{border-color:var(--go)}.glance .gnext.st-overdue{border-color:var(--bad)}.glance .gnext.st-table{border-style:dashed;border-color:var(--accent)}.glance .gask{display:grid;grid-template-columns:2fr 1fr;gap:8px}
 .glance .gnext .gh{font-size:20px;font-weight:800;margin-bottom:8px}
 .glance .gnext .gh .muted{font-weight:600;font-size:16px}
 .glance .grow{display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:center;font-size:clamp(17px,5vw,22px);font-weight:700;padding:3px 0}
@@ -339,7 +342,7 @@ const SEED_STARTERS=[4,5,6,7,8],SEED_CLOSERS=[4,5,6,7,8],SEED_BH=[4,5,8,13],SEED
 const TEAM_DEFAULT={teamName:"Us",teamFull:"My Team"};
 const APP_NAME="Rotation Station",ABOUT={tip:"https://ko-fi.com/rotationstation",tipLabel:"Buy me a coffee",contact:"",site:"https://kramkroc.github.io/rotation-station/"};
 /*SEED-END*/
-const DEF_CFG={tierMins:{1:20,2:15,3:10,4:6},quarterMins:8,shiftLength:4,panelMax:12,strongFloor:3,closerLockSeconds:240,otLengthMins:4,lockOT:true,hotBonusMode:false,hotBonusMins:3,devFloorMins:4,coldTrimMins:2,miniSubs:1,readySecs:60,onTimeSecs:45,restMaxMins:8,foulAware:'gentle',spreadLow:true,t1Floor:2,catchUp:2,haptics:'strong',flash:true,maxSubs:3,maxSubsBreaks:true,bhFloor:1,sound:'auto',passerelle:false,...TEAM_DEFAULT};
+const DEF_CFG={tierMins:{1:20,2:15,3:10,4:6},quarterMins:8,shiftLength:4,panelMax:12,strongFloor:3,closerLockSeconds:240,otLengthMins:4,lockOT:true,hotBonusMode:false,hotBonusMins:3,devFloorMins:4,coldTrimMins:2,miniSubs:1,readySecs:60,onTimeSecs:45,restMaxMins:8,foulAware:'gentle',spreadLow:true,t1Floor:2,catchUp:2,haptics:'strong',flash:true,tableWait:true,maxSubs:3,maxSubsBreaks:true,bhFloor:1,sound:'auto',passerelle:false,...TEAM_DEFAULT};
 const today=()=>{const d=new Date();return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear()};
 const blankStat=()=>({playedSeconds:0,periodSplit:[],fouls:0,consecutiveSeconds:0,fouledOut:false});
 
@@ -350,7 +353,7 @@ function freshMatch(prev){
   return {schemaVersion:2,config:prev?{...DEF_CFG,...prev.config,tierMins:{...DEF_CFG.tierMins,...prev.config.tierMins}}:{...DEF_CFG,tierMins:{...DEF_CFG.tierMins}},roster,
     closersIds:prev?prev.closersIds.slice():SEED_CLOSERS.map(n=>'p'+n),
     periods:Array(4).fill(qLen(prev)),period:1,clockSeconds:qLen(prev),clockRunning:false,lastTickTime:Date.now(),
-    started:false,finished:false,pausedAt:null,onCourtIds:[],plan:{},fixed:{},applied:{},halves:{},pinned:{},moves:{},stats,adj:{},subLogs:[],undo:[],score:{us:0,them:0,ev:[]},tos:[],archived:false,foulAck:{},tf:{},tfThem:{},lineSecs:{},pgrp:{},swapSt:{},qGrid:{},
+    started:false,finished:false,pausedAt:null,onCourtIds:[],plan:{},fixed:{},applied:{},halves:{},pinned:{},moves:{},stats,adj:{},subLogs:[],undo:[],score:{us:0,them:0,ev:[]},tos:[],archived:false,foulAck:{},tf:{},tfThem:{},lineSecs:{},pgrp:{},swapSt:{},qGrid:{},table:null,
     match:{opp:prev?prev.match.opp:'',date:today(),id:'g'+Date.now().toString(36),practice:false}};
 }
 // a new team starts with ten unnumbered players on equal minutes; the coach names and numbers them and sets tiers
@@ -372,7 +375,7 @@ const ui={tab:S.started?'live':'setup',pendingOut:null,sheet:null,sheetId:null,l
 let lastSave=0;
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}lastSave=Date.now()}
 // alert settings belong to the phone, not the team, so they stay put when you switch teams
-const DEV_KEYS=['readySecs','onTimeSecs','haptics','sound','flash'];
+const DEV_KEYS=['readySecs','onTimeSecs','haptics','sound','flash','tableWait'];
 function devStore(){const d={};DEV_KEYS.forEach(k=>d[k]=S.config[k]);try{localStorage.setItem(DEVICE_KEY,JSON.stringify(d))}catch(e){}}
 function devApply(){let d=null;try{d=JSON.parse(localStorage.getItem(DEVICE_KEY)||'null')}catch(e){}if(!d||typeof d!=='object'){devStore();return}DEV_KEYS.forEach(k=>{if(k in d)S.config[k]=d[k]})}
 devApply();
@@ -981,7 +984,7 @@ function tick(){
   S.onCourtIds.forEach(id=>{const s=st(id);s.playedSeconds+=c;while(s.periodSplit.length<S.period)s.periodSplit.push(0);s.periodSplit[S.period-1]+=c;s.consecutiveSeconds+=c});
   if(c>0&&S.onCourtIds.length===5){const k=lineKey(S.onCourtIds);S.lineSecs[k]=(S.lineSecs[k]||0)+c}
   if(S.clockSeconds<=0.0001){
-    S.clockSeconds=0;S.clockRunning=false;S.pausedAt=null;
+    S.clockSeconds=0;S.clockRunning=false;S.pausedAt=null;if(S.table)tableGo();
     log(qLabel(S.period)+' complete');buzz('qend');dbg('periodEnd',[]);if(pOn())replan();   // Passerelle: who has played this quarter changes who can play the next
     openBreak();save();render();return true;
   }
@@ -1018,6 +1021,7 @@ function alertState(){   // what needs the coach's attention right now, most urg
   if(!S.started||S.finished)return null;
   const fd=foulDanger();if(fd)return {kind:'foul4',key:'fd:'+fd.id};
   {const r=runAgainst();if(r&&toLeft('us')>0)return {kind:'run',key:'run:'+S.score.ev[S.score.ev.length-1].n}}
+  if(S.table)return null;   // you've sent them to the table: nothing more to do until the whistle
   const LC=liveCalls();if(LC.later)return null;
   const n=nextPlanned();if(!n||!n.ins.length)return null;
   if(n.status==='ready'||n.status==='now'||n.status==='overdue')return {kind:n.status,key:n.b.key+':'+n.status,n};
@@ -1034,7 +1038,7 @@ function alertTick(){
 }
 function flashHit(kind){if(S.config.flash===false)return;const fl=document.getElementById('flash');if(!fl||!fl.classList||!fl.style)return;
   fl.style.setProperty('--fc',kind==='ready'?'var(--warn)':kind==='now'?'var(--go)':'var(--bad)');fl.classList.add('hit');setTimeout(()=>fl.classList.remove('hit'),450)}
-function startClock(){ui.nudge=null;
+function startClock(){ui.nudge=null;ui.askDone=null;
   if(S.finished||S.clockSeconds<=0)return;
   if(S.onCourtIds.length<5&&!S.started){toast('Need 5 on court to tip off');return}
   if(!S.started&&noNum().length){toast('Give '+noNum().map(p=>p.name).join(', ')+' a shirt number first (Setup → Squad & tiers)',0,0,6000);return}
@@ -1044,7 +1048,15 @@ function startClock(){ui.nudge=null;
     S.started=true;log('Tip-off — starters: '+S.onCourtIds.map(id=>'#'+(P(id).num??'?')).join(' '))}
   requestWake();save();render();
 }
-function pauseClock(){tick();S.clockRunning=false;S.pausedAt=Date.now();save();render()}
+function pauseClock(){tick();S.clockRunning=false;S.pausedAt=Date.now();
+  if(S.table)tableGo();   // the whistle: the players waiting at the table go on now
+  else askAtWhistle();
+  save();render()}
+// a change is due or overdue and the clock has just stopped: this is when subs go on, so ask (once per whistle)
+function askAtWhistle(){
+  ui.askDone=null;if(!S.started||S.finished||S.clockSeconds<=0||S.clockSeconds>=len())return;
+  const n=nextPlanned(),LC=liveCalls();if(!n||!n.ins.length||n.fill||LC.later||(n.status!=='now'&&n.status!=='overdue'))return;
+  ui.askDone={key:n.b.key};buzz(n.status);flashHit(n.status);alertLast={key:n.b.key+':'+n.status,at:Date.now()}}
 function toggleClock(){S.clockRunning?pauseClock():startClock()}
 
 /* ---------- subs, fouls, undo ---------- */
@@ -1057,7 +1069,7 @@ function doSub(outId,inId){
   }
   if(S.clockRunning)tick();
   const prevOn=S.onCourtIds.slice(),n=nextPlanned(),cur=curBlock();
-  S.undo.push({type:'single',outId,inId,prevOn,prevConsec:st(inId).consecutiveSeconds,at:clockLabel(),...snap()});
+  S.undo.push({type:'single',outId,inId,prevOn,prevConsec:st(inId).consecutiveSeconds,at:clockLabel(),p:S.period,c:S.clockSeconds,...snap()});
   S.onCourtIds=outId?S.onCourtIds.map(x=>x===outId?inId:x):S.onCourtIds.concat(inId);
   const onPlan=n&&n.ins.includes(inId)&&(!outId||n.outs.includes(outId))&&(n.overdue||n.inSec<=earlySecs());
   if(onPlan&&!n.overdue){S.fixed[n.b.key]=n.pl.slice();if(cur)S.applied[cur.key]=true;if(n.pl.every(id=>S.onCourtIds.includes(id)))S.applied[n.b.key]=true}
@@ -1072,11 +1084,12 @@ const earlySecs=()=>Math.max(+S.config.readySecs||0,(+S.config.shiftLength||4)*3
 const nowBlock=()=>{const now=elapsedAbs();return blocksAll().find(b=>b.abs0<=now+0.5&&now<b.abs1-0.5)};
 function markNowBlock(){const c=nowBlock();if(!c)return;S.applied[c.key]=true;if(c.abs0>=elapsedAbs()-0.5&&!S.pinned[c.key]){S.fixed[c.key]=S.onCourtIds.slice();(S.early=S.early||{})[c.key]=1}}   // what's on court now is this block's lineup
 function quickSwap(confirmed){
+  if(S.table&&!ui.tableNow){tableGo();return}   // already at the table: a second tap means they're on
   const n=nextPlanned();if(!n||!n.ins.length)return;
   if(n.fill){   // back to five: just add the replacement(s); the planned change for this block still stands
     if(S.clockRunning)tick();
     const prevOn=S.onCourtIds.slice(),prevConsec={};n.ins.forEach(id=>prevConsec[id]=st(id).consecutiveSeconds);
-    S.undo.push({type:'mass',prevOn,prevConsec,ins:n.ins,outs:[],...snap()});
+    S.undo.push({type:'mass',prevOn,prevConsec,ins:n.ins,outs:[],p:S.period,c:S.clockSeconds,...snap()});
     S.onCourtIds=S.onCourtIds.concat(n.ins).slice(0,5);n.ins.forEach(id=>st(id).consecutiveSeconds=0);
     log(clockLabel()+' — IN '+n.ins.map(id=>'#'+(P(id).num??'?')).join(' ')+' (back to five)');
     ui.pendingOut=null;replan();save();render();toast('IN '+n.ins.map(id=>shortName(P(id))).join(', ')+' · back to five','undo');return;
@@ -1085,9 +1098,15 @@ function quickSwap(confirmed){
   const early=!n.overdue&&n.inSec>earlySecs();
   if(early&&!confirmed&&ui.sheet!=='ourto'){ui.sheet='early';renderSheet();return}   // a long way ahead of time: check it wasn't a stray tap
   if(ui.sheet==='early')ui.sheet=null;
+  if(S.clockRunning&&S.config.tableWait!==false&&!ui.tableNow){   // play is on, so they can't be on yet: they wait at the table for the next whistle
+    tick();if(!S.clockRunning)return;
+    S.table={key:n.b.key,ins:n.ins.slice(),outs:n.outs.slice(),p:S.period,at:S.clockSeconds};
+    log(clockLabel()+' — AT THE TABLE: IN '+n.ins.map(id=>'#'+(P(id).num??'?')).join(' ')+' • OUT '+n.outs.map(id=>'#'+(P(id).num??'?')).join(' ')+' (on at the next whistle)');
+    ui.pendingOut=null;save();render();toast('At the table · they go on when you pause the clock','tablecancel','Cancel');return;
+  }
   if(S.clockRunning)tick();
   const prevOn=S.onCourtIds.slice(),prevConsec={};n.ins.forEach(id=>prevConsec[id]=st(id).consecutiveSeconds);
-  S.undo.push({type:'mass',prevOn,prevConsec,ins:n.ins,outs:n.outs,...snap()});
+  S.undo.push({type:'mass',prevOn,prevConsec,ins:n.ins,outs:n.outs,p:S.period,c:S.clockSeconds,...snap()});
   S.onCourtIds=S.onCourtIds.filter(id=>!n.outs.includes(id)).concat(n.ins).slice(0,5);
   n.ins.forEach(id=>st(id).consecutiveSeconds=0);
   if(early){markNowBlock();if(!S.pinned[n.b.key])delete S.fixed[n.b.key]}   // early: this five plays from now, and the planned change is picked again from the new minutes
@@ -1098,6 +1117,20 @@ function quickSwap(confirmed){
   ui.pendingOut=null;replan();save();render();
   toast('IN '+n.ins.map(id=>shortName(P(id))).join(', ')+' · OUT '+n.outs.map(id=>shortName(P(id))).join(', '),'undo',n.ins.length>1?'Undo all '+n.ins.length:'Undo');
 }
+// the players waiting at the table go on: the planned change if it's still the same, otherwise exactly who went to the table
+function tableGo(){
+  const t=S.table;S.table=null;if(!t||!S.started)return;
+  if(S.clockRunning)tick();
+  const ins=t.ins.filter(id=>{const p=P(id);return p&&p.active&&!st(id).fouledOut&&!S.onCourtIds.includes(id)}),outs=t.outs.filter(id=>S.onCourtIds.includes(id));
+  if(!ins.length||ins.length<outs.length){log(clockLabel()+' — the change at the table was dropped (the players changed meanwhile)');toast('Change at the table dropped: make it by hand');return}
+  const n=nextPlanned(),same=(a,b)=>a.length===b.length&&a.every(x=>b.includes(x));
+  ui.tableNow=1;
+  try{if(n&&n.b.key===t.key&&same(n.ins,ins)&&same(n.outs,outs))quickSwap(true);
+    else ins.forEach((id,i)=>doSub(outs[i]||null,id))}
+  finally{ui.tableNow=0}
+}
+function tableCancel(){const t=S.table;if(!t)return;S.table=null;
+  log(clockLabel()+' — change at the table cancelled (IN '+t.ins.map(id=>'#'+(P(id).num??'?')).join(' ')+')');save();render();toast('Cancelled · they stay on the bench')}
 function pinBlock(key,ids){S.fixed[key]=ids.slice();S.pinned[key]=1;const b=blocksAll().find(x=>x.key===key);
   log((S.started?clockLabel()+' — ':'')+'PLAN: locked lineup for '+(b?blockLabel(b):key)+': '+ids.map(id=>'#'+(P(id).num??'?')).join(' '),'rp');replan();save();render()}
 function unpinBlock(key){delete S.fixed[key];delete S.pinned[key];log((S.started?clockLabel()+' — ':'')+'PLAN: unlocked '+key,'rp');replan();save();render()}
@@ -1241,7 +1274,8 @@ function applySetup(text){
   S.roster.forEach(p=>st(p.id));
   S.config={...DEF_CFG,...o.config,tierMins:{...DEF_CFG.tierMins,...(o.config||{}).tierMins}};
   devApply();S.closersIds=(o.closersIds||[]).filter(id=>S.roster.some(p=>p.id===id));S.plan={};S.fixed={};S.applied={};S.halves={};S.pinned={};S.moves={};S.adj={};
-  replan();log('SETUP loaded: '+S.roster.length+' players and settings'+(fromBackup?' (from a season backup)':''),'rp');save();
+  replan();dbgInit();dbg('applySetup',[S.roster.length]);   // the trace starts again from the new squad, so it can be replayed
+  log('SETUP loaded: '+S.roster.length+' players and settings'+(fromBackup?' (from a season backup)':''),'rp');save();
   return {n:S.roster.length,fromBackup};
 }
 function seasonTable(){
@@ -1335,7 +1369,7 @@ function addFoul(id,delta){
   const tk=tfKey(),tfD=delta>0?1:(S.tf[tk]||0)>0?-1:0;S.tf[tk]=(S.tf[tk]||0)+tfD;
   S.undo.push({type:'foul',id,delta,prevOn,wasOut,tk,tfD});
   if(s.fouls>=5&&!s.fouledOut){
-    s.fouledOut=true;S.onCourtIds=S.onCourtIds.filter(x=>x!==id);
+    s.fouledOut=true;S.onCourtIds=S.onCourtIds.filter(x=>x!==id);Object.assign(S.undo[S.undo.length-1],{out:1,p:S.period,c:S.clockSeconds});
     log(clockLabel()+' — '+tag(id)+' FOULED OUT (5)','rp');
     log(clockLabel()+' — RE-PLAN: '+tag(id)+' fouled out, blocks re-solved','rp');
     replan();
@@ -1346,6 +1380,7 @@ function addFoul(id,delta){
   if(delta>0)toast('F:'+s.fouls+' — '+tag(id)+' · team fouls '+tfUs()+(tfUs()===4?' (next = free throws)':tfUs()>=5?' (free throws)':''),'foulundo:'+id);
 }
 function undoLabel(u){
+  if(!u&&S.table)return 'change at the table';
   u=u||S.undo[S.undo.length-1];if(!u)return '';
   const nm=id=>shortName(P(id));
   if(u.type==='single')return nm(u.inId)+' in'+(u.outId?' for '+nm(u.outId):'');
@@ -1354,11 +1389,13 @@ function undoLabel(u){
   if(u.type==='score')return (u.side==='us'?tn():oppName())+' +'+u.pts;
   if(u.type==='timeout')return (u.side==='us'?'our':oppName()+'’s')+' timeout';
   if(u.type==='mins')return 'minutes fix on '+nm(u.id);
+  if(u.type==='chgmove')return 'change time move';
   if(u.type==='tfthem')return oppName()+' team foul'+(u.d<0?' removal':'');
   if(u.type==='scorefix')return (u.side==='us'?tn():oppName())+' −1';
   return 'last action';
 }
 function undo(){
+  if(S.table){tableCancel();return}
   const u=S.undo.pop();if(!u){toast('Nothing to undo');return}
   const what=undoLabel(u);
   if(S.clockRunning)tick();
@@ -1369,6 +1406,7 @@ function undo(){
   else if(u.type==='tfthem'){S.tfThem[u.k]=Math.max(0,(S.tfThem[u.k]||0)-u.d);log(clockLabel()+' — UNDO: '+oppName()+' team fouls '+S.tfThem[u.k])}
   else if(u.type==='timeout'){S.tos.pop();log(clockLabel()+' — UNDO: timeout removed')}
   else if(u.type==='scorefix'){const ev=S.score.ev;if(u.prev.pts>1&&ev[u.i]&&ev[u.i].n===u.prev.n)ev[u.i].pts=u.prev.pts;else ev.splice(u.i,0,u.prev);S.score[u.side]++;log(clockLabel()+' — UNDO: score fix ('+S.score.us+'–'+S.score.them+')')}
+  else if(u.type==='chgmove'){const c=S.undo[u.ref];if(c)shiftChange(c,-u.d);log(clockLabel()+' — UNDO: change back at '+(c?mmss(c.c):'?'))}
   else if(u.type==='mins'){const s=st(u.id);s.playedSeconds=u.before;s.periodSplit=u.split;log(clockLabel()+' — UNDO: minutes fix on '+tag(u.id)+' (back to '+mmss(u.before)+')')}
   else if(u.type==='foul'){const s=st(u.id);s.fouls-=u.delta;s.fouledOut=u.wasOut;if(u.tk)S.tf[u.tk]=Math.max(0,(S.tf[u.tk]||0)-(u.tfD||0));S.onCourtIds=u.prevOn;log(clockLabel()+' — UNDO: foul change on '+tag(u.id)+' (F:'+s.fouls+')')}
   ui.pendingOut=null;replan();save();render();
@@ -1583,6 +1621,7 @@ function card(p,T,on,ctx){
     <div class="r2">${b.join('')}<span>${m1(a)} / ${m1(tg)}m${tg-a>0?' · '+m1(tg-a)+' left':''}</span><span class="trk ${tk.cls}">· ${S.finished?(tk.cls==='ok'?'on target':tk.d<0?m1(-tk.d)+'m short':'+'+m1(tk.d)+'m over'):trackTxt(tk)}</span>${on&&S.started?'<span>· on '+mmssShort(s.consecutiveSeconds)+'</span>':''}</div>
     <div class="bar ${tk.cls}" title="${S.finished?'Final minutes vs target':'Plan finishes on '+m1(projMins(p.id))+' of '+m1(tg)}"><i style="width:${pct}%"></i>${S.started?`<b style="left:${ep}%"></b>`:''}</div></div>`;
 }
+const asking=n=>ui.askDone&&!S.clockRunning&&!S.table&&n&&n.b.key===ui.askDone.key;   // the whistle question is up
 function viewGlance(){
   const n=nextPlanned(),LC=liveCalls(),running=S.clockRunning,fd=foulDanger(),a=alertState();
   const st0=S.finished?'Full time':running?'● Running — tap to pause':!S.started?'Tap to tip off':S.clockSeconds<=0?'Quarter over — tap for the break':'❚❚ Paused — tap to run';
@@ -1593,7 +1632,10 @@ function viewGlance(){
     else{const at=blockLabel(n.b).split('–')[0],W=+S.config.onTimeSecs||0;
       const head=n.fill?`SHORT-HANDED <span class="muted">· ${S.onCourtIds.length} on court</span>`:n.status==='overdue'?`OVERDUE <span class="muted">· due ${at}, ${mmssShort(n.late)} ago</span>`:n.status==='now'?`SUB NOW <span class="muted">· ${at}</span>`:n.status==='ready'?`GET READY <span class="muted">· ${at} in ${mmssShort(n.inSec)}</span>`:`Next: ${at} <span class="muted">· in ${mmssShort(n.inSec)}</span>`;
       const k=Math.max(n.ins.length,n.outs.length),rows=[];for(let i=0;i<k;i++)rows.push(`<div class="grow"><span class="o">${n.outs[i]?esc(shortName(P(n.outs[i]))):''}</span><span class="muted">→</span><span class="i">${n.ins[i]?esc(shortName(P(n.ins[i]))):''}</span></div>`);
-      next=`<div class="gnext st-${n.status}"><div class="gh">${head}</div><div class="grow ghd"><span class="o">OUT</span><span></span><span class="i">IN</span></div>${rows.join('')}<button class="btn pri gbtn" data-act="qswap">Quick swap ⚡${!n.overdue&&n.inSec>W?' early':''}</button></div>`}
+      next=asking(n)?`<div class="gnext st-now"><div class="gh">DID THEY GO ON? <span class="muted">· due ${at}</span></div><div class="grow ghd"><span class="o">OUT</span><span></span><span class="i">IN</span></div>${rows.join('')}<div class="gask"><button class="btn pri gbtn" data-act="qswap">✓ Yes, they’re on</button><button class="btn gbtn" data-act="askno">Not yet</button></div></div>`
+        :`<div class="gnext st-${n.status}"><div class="gh">${head}</div><div class="grow ghd"><span class="o">OUT</span><span></span><span class="i">IN</span></div>${rows.join('')}<button class="btn pri gbtn" data-act="qswap">Quick swap ⚡${!n.overdue&&n.inSec>W?' early':''}</button></div>`}
+    if(S.table){const t=S.table,k=Math.max(t.ins.length,t.outs.length),rows=[];for(let i=0;i<k;i++)rows.push(`<div class="grow"><span class="o">${t.outs[i]?esc(shortName(P(t.outs[i]))):''}</span><span class="muted">→</span><span class="i">${t.ins[i]?esc(shortName(P(t.ins[i]))):''}</span></div>`);
+      next=`<div class="gnext st-table"><div class="gh">AT THE TABLE <span class="muted">· on at the next whistle</span></div><div class="grow ghd"><span class="o">OUT</span><span></span><span class="i">IN</span></div>${rows.join('')}<div class="gask"><button class="btn pri gbtn" data-act="tablego">✓ On now</button><button class="btn gbtn" data-act="tablecancel">Cancel</button></div></div>`}
   }
   return `<div class="glance">
     <div class="gtop"><span>${qLabel(S.period)}</span><span class="sp"></span>${S.started&&!S.finished?(ui.awake!=='none'?'<span class="trk ok">☀</span>':'<button class="chip warn" data-act="sheet:awake">⚠ May sleep</button>'):''}<span class="${tfUs()>=5?'trk way':tfUs()===4?'trk short':''}">TF ${tfUs()}</span><button class="btn sm ghost" data-act="glance:0" aria-label="Back to the full screen">✕ Full view</button></div>
@@ -1648,10 +1690,16 @@ function viewLive(){
       :n.status==='now'?`<b>Sub now</b> — ${kind.toLowerCase()} at ${at}${n.overdue&&n.late>1?` <span class="muted">· ${mmssShort(n.late)} in</span>`:''}`
       :n.status==='ready'?`<b>Get ready</b> — send ${names} to the table <span class="muted">· ${kind.toLowerCase()} at ${at} in ${mmssShort(n.inSec)}</span>`
       :`<b>${kind} at ${at}</b> <span class="muted">· in ${mmssShort(n.inSec)}</span>`;
-    planBox=`<div class="plannext st-${n.status}"><div class="ph">${LC.closersIn?'<b>🔒 Get your closers on</b> · ':''}${head}</div>
+    planBox=asking(n)?`<div class="plannext st-now ask"><div class="ph"><b>Whistle: did ${names} go on?</b> <span class="muted">· ${kind.toLowerCase()} due ${at}</span></div>
+      <div class="swaps">${swapRows(n)}</div>
+      <div class="pbtns"><button class="btn pri" data-act="qswap">✓ Yes, they’re on</button><button class="btn" data-act="askno">Not yet</button></div></div>`
+      :`<div class="plannext st-${n.status}"><div class="ph">${LC.closersIn?'<b>🔒 Get your closers on</b> · ':''}${head}</div>
       <div class="swaps">${swapRows(n)}</div>
       <div class="pbtns"><button class="btn pri" data-act="qswap">Quick swap ⚡${!n.overdue&&n.inSec>W?' early':''}</button>${n.status==='overdue'?'<button class="btn" data-act="skipplan">Skip this change</button>':''}</div></div>`;
   }}
+  if(S.table&&S.started&&!S.finished)planBox=`<div class="plannext st-table"><div class="ph"><b>At the table</b> · they go on when you pause the clock for the whistle</div>
+      <div class="swaps">${swapRows(S.table)}</div>
+      <div class="pbtns"><button class="btn pri" data-act="tablego">✓ They’re on now</button><button class="btn" data-act="tablecancel">Cancel</button></div></div>`;
   const hdr=`<div class="status"><span class="per">${qLabel(S.period)}${S.period<=4?' · '+(S.period<=2?'1st':'2nd')+' half':''}</span>
     ${strongOn<floor&&on.length?`<span class="chip warn">⚠️ Low core &lt;${floor}</span>`:''}
     ${t1F&&t1On<t1F&&on.length===5&&S.started?`<span class="chip warn">⚠️ ${t1On} T1 on</span>`:''}
@@ -1861,6 +1909,7 @@ function viewSetup(){
     <div class="field"><label>Counts as on time within</label>${seg('onTimeSecs',[0,30,45,60],c.onTimeSecs,o=>o?'±'+o+'s':'Exact')}<span class="muted small">Waiting for a dead ball isn't "late".</span></div>
     <div class="field"><label>Vibration</label>${seg('haptics',['strong','light','off'],c.haptics||'strong',o=>o==='strong'?'Strong':o==='light'?'Light':'Off')}<span class="muted small">Get ready, sub now, overdue, 4 fouls, end of quarter. Android phones only.${canVibrate()?'':' <b>This device can’t vibrate</b>: use Sound.'}</span></div>
     <div class="field"><label>Sound</label>${seg('sound',['auto','on','off'],c.sound||'auto',o=>({auto:'Auto',on:'On',off:'Off'})[o])}<span class="muted small">Beeps at the same moments as the buzz. Auto: only on devices that can’t vibrate (iPhone, iPad, tablets): ${soundOn()?'<b>on here</b>':'off here'}. Turn the volume up. <button class="btn sm" data-act="soundtest">▶ Test</button></span></div>
+    <div class="field"><label>Quick swap while the clock runs</label>${seg('tableWait',[true,false],c.tableWait!==false,o=>o?'Waits for the whistle':'Swaps at once')}<span class="muted small">Players can only go on when play stops. Waits: tap when you send them to the table; the change happens when you next pause the clock.</span></div>
     <div class="field"><label>Screen flash</label>${seg('flash',[true,false],c.flash!==false,o=>o?'On':'Off')}<span class="muted small">Amber get ready, green sub now, red overdue. Every phone.</span></div>
   </div>`)}
   <p class="note" style="text-align:center">${esc(APP_NAME)} · version ${esc(APP_VERSION)} · <button class="btn sm ghost" data-act="sheet:about">About &amp; privacy</button>${ABOUT.site?` · <a href="${esc(ABOUT.site)}guide.html" target="_blank" rel="noopener">How to use it</a>`:''}</p>`;
@@ -1987,7 +2036,8 @@ function renderSheet(){
     h=`<h2>Resync to table clock</h2><div class="clock stop"><div class="digits">${mmss(S.clockSeconds)}</div><div class="state">${qLabel(S.period)}</div></div>
     <div class="grid4" style="margin-top:10px"><button class="btn" data-act="rs:-60">−1:00</button><button class="btn" data-act="rs:-10">−0:10</button><button class="btn" data-act="rs:10">+0:10</button><button class="btn" data-act="rs:60">+1:00</button></div>
     <div class="grid2" style="margin-top:8px"><input id="rsv" type="text" inputmode="numeric" placeholder="mm:ss" style="min-height:48px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:0 12px"><button class="btn" data-act="rsset">Set</button></div>
-    <p class="note">The five on court now get the same change to their minutes (−1:00 on the clock = +1:00 played). It assumes the same five were on while the clocks drifted apart.</p>
+    <p class="note">The five on court now get the same change to their minutes (−1:00 on the clock = +1:00 played). Winding the clock back takes the time off whoever was on court then: a change you made in that time moves to the new clock time.</p>
+    ${chgMoveHtml()}
     <button class="btn pri" style="width:100%;margin-top:8px" data-act="close">Done</button>`;
   }else if(ui.sheet==='block'){
     const B=blocksAll(),b=B.find(x=>x.key===ui.sheetId),now=elapsedAbs();
@@ -2104,15 +2154,69 @@ function resync(delta,abs){
   const before=S.clockSeconds;
   S.clockSeconds=Math.max(0,Math.min(len(),abs!=null?abs:S.clockSeconds+delta));
   const moved=before-S.clockSeconds;   // + = the table clock had run further than ours: the five on court played that time too
-  if(S.started&&moved)S.onCourtIds.forEach(id=>{const s=st(id);while(s.periodSplit.length<S.period)s.periodSplit.push(0);
-    const d=moved>0?moved:-Math.min(-moved,s.periodSplit[S.period-1]);   // winding back never takes more than they've played this quarter
-    s.playedSeconds+=d;s.periodSplit[S.period-1]+=d;s.consecutiveSeconds=Math.max(0,s.consecutiveSeconds+d)});
-  log(qLabel(S.period)+' — RESYNC '+mmss(before)+' → '+mmss(S.clockSeconds)+(S.started&&moved?' · on-court minutes '+(moved>0?'+':'−')+mmssShort(Math.abs(moved)):''));
+  let shifted=0;
+  if(S.started&&moved>0)secsAdd(S.onCourtIds,moved);
+  else if(S.started&&moved<0)shifted=windBack(before,S.clockSeconds);
+  log(qLabel(S.period)+' — RESYNC '+mmss(before)+' → '+mmss(S.clockSeconds)+(S.started&&moved?' · on-court minutes '+(moved>0?'+':'−')+mmssShort(Math.abs(moved)):'')+(shifted?' · '+(shifted>1?shifted+' changes':'the change')+' made in that time now at '+mmss(S.clockSeconds):''));
   if(S.started)replan();save();renderSheet();
 }
 
+// add x seconds (or take them back, never below what they've played this quarter) to these players' minutes
+function secsAdd(ids,x,per){per=per||S.period;ids.forEach(id=>{const s=st(id);while(s.periodSplit.length<per)s.periodSplit.push(0);
+  const d=x>0?x:-Math.min(-x,s.periodSplit[per-1]);s.playedSeconds+=d;s.periodSplit[per-1]+=d;
+  if(per===S.period&&S.onCourtIds.includes(id))s.consecutiveSeconds=Math.max(0,s.consecutiveSeconds+d)});
+  if(ids.length===5){const k=lineKey(ids);S.lineSecs[k]=Math.max(0,(S.lineSecs[k]||0)+x)}}
+// court changes this quarter, oldest first (subs, quick swaps, foul-outs), each with the clock time it was made
+const chgList=()=>S.undo.filter(u=>u.prevOn&&u.p===S.period&&u.c!=null&&(u.type!=='foul'||u.out));
+// the clock went back up from `from` to `to`: those seconds come off whoever the app had on court then.
+// A change made in that window really happened at `to`, so the players it took off lose the time, not the ones it put on.
+function windBack(from,to){
+  const L=chgList();let hi=from,on=S.onCourtIds.slice(),i=L.length-1,n=0;
+  while(hi<to){const u=i>=0?L[i]:null;
+    if(!u||u.c>=to){secsAdd(on,hi-to);break}
+    if(u.c>hi)secsAdd(on,hi-u.c);
+    hi=Math.max(hi,u.c);u.c=to;on=u.prevOn;n++;i--}
+  return n}
+const chgSides=u=>u.type==='single'?{ins:[u.inId],outs:u.outId?[u.outId]:[]}:{ins:u.ins||[],outs:u.outs||[]};
+// the latest change this quarter, and how far it can move: back to the change before it (or the start of the quarter), forward to now
+function lastChange(){
+  if(!S.started||S.finished)return null;
+  const L=chgList(),u=L[L.length-1];if(!u||u.type==='foul')return null;
+  const sd=chgSides(u),q=id=>st(id).periodSplit[S.period-1]||0;   // never takes more than someone has played this quarter (an undone swap can leave them short)
+  return {u,...sd,lo:Math.max(S.clockSeconds,u.c-Math.min(Infinity,...sd.ins.map(q))),hi:Math.min(L.length>1?L[L.length-2].c:len(),u.c+Math.min(Infinity,...sd.outs.map(q)),!sd.outs.length&&!(L.length>1&&L[L.length-2].out)?u.c:Infinity)}}   // back to five after an injury: when the court went short isn't recorded, so it can't move earlier
+// d>0: the change really happened d seconds earlier (more time on the clock) than it was tapped; d<0: later
+function shiftChange(u,d){
+  const {ins,outs}=chgSides(u),after=S.onCourtIds.slice(),c0=u.c;
+  secsAdd(ins,d,u.p);secsAdd(outs,-d,u.p);   // in the change's own quarter (an undo can come after the break)
+  if(u.prevOn.length===5){const k=lineKey(u.prevOn);S.lineSecs[k]=Math.max(0,(S.lineSecs[k]||0)-d)}
+  if(after.length===5){const k=lineKey(after);S.lineSecs[k]=Math.max(0,(S.lineSecs[k]||0)+d)}
+  u.c=c0+d;
+  S.score.ev.forEach(e=>{if(e.p!==u.p||!Array.isArray(e.on))return;   // points scored in between count for the five really on court
+    if(d>0&&e.c>=c0&&e.c<=c0+d)e.on=after.slice();else if(d<0&&e.c>c0+d&&e.c<=c0)e.on=u.prevOn.slice()});
+}
+function moveChange(t){
+  if(S.clockRunning)tick();
+  const L=lastChange();if(!L)return;
+  t=Math.max(L.lo,Math.min(L.hi,t));const d=Math.round((t-L.u.c)*10)/10;
+  if(Math.abs(d)<0.5){toast(t>=L.hi-0.5&&d>=0?'It can’t go before the change before it':'Already at '+mmss(L.u.c));return}
+  const was=L.u.c,ref=S.undo.indexOf(L.u),nums=a=>a.map(id=>'#'+(P(id).num??'?')).join(' ');
+  S.undo.push({type:'chgmove',ref,d,...snap()});
+  shiftChange(L.u,d);
+  log(clockLabel()+' — CHANGE MOVED '+mmss(was)+' → '+mmss(L.u.c)+': IN '+nums(L.ins)+(L.outs.length?' • OUT '+nums(L.outs):'')+' ('+(d>0?'+':'−')+mmssShort(Math.abs(d))+' to those who came on)');
+  replan();save();render();
+  toast('Change moved to '+mmss(L.u.c)+(d>0?' · '+mmssShort(d)+' more for those who came on':' · '+mmssShort(-d)+' more for those who went off'),'undo');
+}
+
+// resync sheet: put the last change at the time it really happened (tapped late in the heat of the game, or early while they waited at the table)
+function chgMoveHtml(){
+  const L=lastChange();if(!L)return '';
+  const nums=a=>a.map(id=>'#'+(P(id).num??'?')).join(' ');
+  return `<h3 style="margin-top:14px">Last change: ${mmss(L.u.c)}</h3><p class="muted small">IN ${nums(L.ins)}${L.outs.length?' · OUT '+nums(L.outs):''}. Tapped late or early? Move it to when they really went on: the minutes move between the players who came on and went off.</p>
+    <div class="grid2"><button class="btn" data-act="chgmv:10"${L.u.c>=L.hi-0.5?' disabled':''}>◀ 10s earlier</button><button class="btn" data-act="chgmv:-10"${L.u.c<=L.lo+0.5?' disabled':''}>10s later ▶</button></div>
+    <div class="grid2" style="margin-top:8px"><input id="chgv" type="text" inputmode="numeric" placeholder="went on at mm:ss" style="min-height:48px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:0 12px"><button class="btn" data-act="chgset">Move</button></div>
+    <p class="note">Between ${mmss(L.hi)}${(()=>{const C=chgList(),p=C.length>1?C[C.length-2].c:len();return L.hi>=p-0.5?' ('+(C.length>1?'the change before':'start of '+qLabel(S.period))+')':''})()} and ${mmss(L.lo)}${L.lo<=S.clockSeconds+0.5?' (now)':''}.</p>`}
 /* ---------- debug trace: every engine action + what the app believed afterwards ---------- */
-const APP_VERSION='2.23.0 · 2026-11-07';
+const APP_VERSION='2.24.0 · 2026-11-15';
 let dbgDepth=0;
 function dbgInit(){S.debug={app:APP_VERSION,created:new Date().toISOString(),start:{config:JSON.parse(JSON.stringify(S.config)),roster:JSON.parse(JSON.stringify(S.roster)),closersIds:S.closersIds.slice(),periods:S.periods.slice()},ev:[]}}
 const ids2n=a=>(a||[]).map(id=>{const p=P(id);return p?p.num:id});
@@ -2123,7 +2227,7 @@ function dbgSnap(){
   S.roster.forEach(p=>{if(st(p.id).fouls)fouls[p.num]=st(p.id).fouls});
   return {court:ids2n(S.onCourtIds),next:n?{blk:n.b.key,in:ids2n(n.ins),out:ids2n(n.outs),overdue:!!n.overdue}:null,
     lock:lc.lock,prompt:lc.show,hot:S.roster.filter(p=>p.hot).map(p=>p.num),cold:S.roster.filter(p=>p.cold).map(p=>p.num),
-    tg,secs,fouls,plan,adj:JSON.parse(JSON.stringify(S.adj)),applied:Object.keys(S.applied),fixed:Object.keys(S.fixed),halves:Object.keys(S.halves||{}),pinned:Object.keys(S.pinned||{}),moves:{...(S.moves||{})},score:[S.score.us,S.score.them],tos:S.tos.length,tf:[tfUs(),tfThem()],status:n?n.status:null};
+    tg,secs,fouls,plan,adj:JSON.parse(JSON.stringify(S.adj)),applied:Object.keys(S.applied),fixed:Object.keys(S.fixed),halves:Object.keys(S.halves||{}),pinned:Object.keys(S.pinned||{}),moves:{...(S.moves||{})},score:[S.score.us,S.score.them],tos:S.tos.length,tf:[tfUs(),tfThem()],status:n?n.status:null,table:S.table?{in:ids2n(S.table.ins),out:ids2n(S.table.outs)}:null};
 }
 function dbg(a,x,pre){
   try{
@@ -2142,7 +2246,7 @@ function traced(name,fn){return function(...args){
   return out}}
 doSub=traced('doSub',doSub);quickSwap=traced('quickSwap',quickSwap);skipPlanned=traced('skipPlanned',skipPlanned);
 addFoul=traced('addFoul',addFoul);undoFoul=traced('undoFoul',undoFoul);undo=traced('undo',undo);
-startClock=traced('startClock',startClock);pauseClock=traced('pauseClock',pauseClock);resync=traced('resync',resync);
+startClock=traced('startClock',startClock);pauseClock=traced('pauseClock',pauseClock);resync=traced('resync',resync);tableGo=traced('tableGo',tableGo);tableCancel=traced('tableCancel',tableCancel);moveChange=traced('moveChange',moveChange);
 swapSlots=traced('swapSlots',swapSlots);swapClear=traced('swapClear',swapClear);setActive=traced('setActive',setActive);setNotPicked=traced('setNotPicked',setNotPicked);setHot=traced('setHot',setHot);confirmHot=traced('confirmHot',confirmHot);setCold=traced('setCold',setCold);
 startNextPeriod=traced('startNextPeriod',startNextPeriod);pinBlock=traced('pinBlock',pinBlock);addScore=traced('addScore',addScore);callTimeout=traced('callTimeout',callTimeout);importGame=traced('importGame',importGame);unpinBlock=traced('unpinBlock',unpinBlock);moveBoundary=traced('moveBoundary',moveBoundary);adjMins=traced('adjMins',adjMins);addTeamFoulThem=traced('addTeamFoulThem',addTeamFoulThem);scoreMinus=traced('scoreMinus',scoreMinus);setScorer=traced('setScorer',setScorer);addOT=traced('addOT',addOT);endPeriodEarly=traced('endPeriodEarly',endPeriodEarly);fullTime=traced('fullTime',fullTime);
 // Compact trace (pumas-debug-2): each event keeps only what changed since the one before, then the whole thing is
@@ -2220,6 +2324,9 @@ function act(a,e){
     case 'hotno':confirmHot(false);break;
     case 'qswap':quickSwap();if(ui.sheet==='break')renderSheet();break;
     case 'qswapgo':quickSwap(true);renderSheet();break;
+    case 'tablego':tableGo();save();render();break;
+    case 'tablecancel':tableCancel();break;
+    case 'askno':ui.askDone=null;render();break;
     case 'undo':undo();if(ui.sheet==='score')renderSheet();break;
     case 'foulundo':undoFoul(id);break;
     case 'skipplan':skipPlanned();break;
@@ -2274,6 +2381,8 @@ function act(a,e){
     case 'ot':addOT(+id);break;
     case 'fulltime':fullTime();break;
     case 'rs':resync(+id);break;
+    case 'chgmv':{const L=lastChange();if(L)moveChange(L.u.c+(+id));renderSheet();break}
+    case 'chgset':{const m=($('#chgv').value||'').match(/^(\d{1,2}):?(\d{2})$/);if(!m){toast('Type the time like 3:43');break}moveChange((+m[1])*60+(+m[2]));renderSheet();break}
     case 'rsset':{const m=($('#rsv').value||'').match(/^(\d{1,2}):?(\d{2})$/);if(!m){toast('Type the time like 4:35');break}resync(0,(+m[1])*60+(+m[2]));break}
     case 'close':if(ui.sheet==='swap'&&ui.swap&&ui.swap.back){ui.sheet=ui.swap.back;ui.swap=null;render();break}
       ui.sheet=null;ui.hotConfirm=null;ui.swap=null;ui.draft=null;ui.pb=null;ui.pgSel=null;render();break;
