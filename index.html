@@ -506,6 +506,22 @@ const pShort=()=>S.config.passerelle&&!pOn()?'Passerelle needs at least 10 playe
 const wt=p=>Math.max(0,+S.config.tierMins[p.tier]||0);
 // the lowest tier playing today is protected: rounding, hot bonuses and rebalancing never take minutes from it
 const protectedTier=()=>{const t=availList().map(p=>p.tier);return t.length?Math.max(...t):0};
+// quarter focus (this game only, S.match.focus = {q:[3,4], lv:'light'|'strong'}): how far each player's minutes lean into the
+// focus quarters. T1s +1, T2s +½, T3s −½, the lowest tier −1 (away from them). Off, or every quarter picked: null
+const FOCUS_A={light:0.3,strong:0.6};   // strong also relaxes the line-up rules outside the focus quarters (see solvePlan)
+function focusLean(){const f=S.match&&S.match.focus;if(!f||!FOCUS_A[f.lv]||!f.q||!f.q.length||f.q.length>=4)return null;
+  const pt=protectedTier(),k={};availList().forEach(p=>k[p.id]=p.tier===1?1:p.tier===pt?-1:p.tier===2?0.5:-0.5);return {q:f.q,a:FOCUS_A[f.lv],k,strong:f.lv==='strong'}}
+const focusOut=p=>{const f=focusLean();return f&&p<=4&&!f.q.includes(p)?f:null};   // quarter p is outside the focus quarters
+const t1FloorAt=(p,T)=>{const f=focusOut(p);return f&&f.strong?Math.min(1,t1FloorEff(T)):t1FloorEff(T)};
+const focusText=()=>{const f=S.match.focus;return f?f.q.map(qLabel).join(' + ')+' ('+(f.lv==='strong'?'strong':'light')+')':''};
+// q: the focus quarters; lv: 'light' | 'strong' | '' (off: the quarters picked are kept for next time)
+function setFocus(q,lv){
+  q=[...new Set(q.map(Number))].filter(x=>x>=1&&x<=4).sort();
+  const was=JSON.stringify(focusLean()&&S.match.focus);
+  S.match.focus={q,lv:FOCUS_A[lv]?lv:''};S.match.focusLvl=0;
+  if(JSON.stringify(focusLean()&&S.match.focus)!==was)log((S.started?clockLabel()+' — ':'')+(focusLean()?'QUARTER FOCUS: '+focusText():'Quarter focus off')+', plan redone','rp');
+  replan();save();render();
+}
 function baseTargets(){
   const G=pGroups(),pool=5*sum(S.periods)/60,T={},av=availList().filter(p=>!G||G.g[p.id]!==0),ids=new Set(av.map(p=>p.id));   // Passerelle: no 1st half, no more minutes
   let frozen=0;
@@ -690,11 +706,19 @@ function solvePlan(halves,T,fine){   // fine: the final plan, polished (choosing
   const pt0=protectedTier(),lowT=S.config.spreadLow&&pt0>=3?pt0:0,LOWPEN=450;   // keep the lowest tier (T4s) on court one at a time where possible
   // fair-share pacing: score = minutes still owed minus what they'd still be owed if they were exactly on pace
   const isLock=b=>lockKeys.has(b.key);
-  const U=sum(B.filter(b=>!isLock(b)).map(b=>b.dur))||1;
+  // quarter focus: each player's pace is weighted by quarter, so stronger tiers are due more of their minutes in the focus quarters
+  // and the others more outside them. Totals don't change; off, every weight is 1
+  const FZ=noLean===1?null:focusLean(),fw=(id,b)=>FZ&&b.p<=4?1+FZ.a*(noLean||1)*FZ.k[id]*(FZ.q.includes(b.p)?1:-1):1;
+  const U={},cumU={},t0=fut[0]?fut[0].abs0:now;
+  av.forEach(p=>{U[p.id]=sum(B.filter(b=>!isLock(b)).map(b=>b.dur*fw(p.id,b)))||1;cumU[p.id]=sum(B.filter(b=>!isLock(b)&&b.abs1<=t0).map(b=>b.dur*fw(p.id,b)))});
+  const fracOf=id=>Math.min(1,cumU[id]/U[id]);
+  // Strong focus: outside the focus quarters the lowest tier may share the court and one T1 is enough, so the focus quarters get the strength
+  const out_=b=>!!FZ&&b.p<=4&&!FZ.q.includes(b.p),t1At=b=>out_(b)&&FZ.strong?Math.min(1,t1Floor):t1Floor,lowAt=b=>out_(b)?0:lowT;
+  // ...and inside them only T1s and T2s go on, while there are five of them (noBar 2: only in the last focus quarter, 1: the lean alone)
+  const weak=id=>tierOf(id)>=3,BARPEN=1e5,barAt=b=>!!FZ&&FZ.strong&&noBar!==1&&b.p<=4&&FZ.q.includes(b.p)&&(!noBar||b.p===Math.max(...FZ.q))&&av.filter(p=>p.tier<=2).length>=5;
   const lockedFut={};av.forEach(p=>lockedFut[p.id]=0);
   fut.forEach(b=>{if(isLock(b))(forced[b.key]||[]).forEach(id=>lockedFut[id]+=b.dur)});
   const Tn=id=>(T[id]||0)*60-lockedFut[id];
-  let cumU=sum(B.filter(b=>!isLock(b)&&b.abs1<=(fut[0]?fut[0].abs0:now)).map(b=>b.dur));
   // rest guard: track how long each player will have been on when a block ends
   const restLim=(+S.config.restMaxMins||0)*60,consec={};
   av.forEach(p=>consec[p.id]=S.onCourtIds.includes(p.id)?st(p.id).consecutiveSeconds+(cur?cur.abs1-now:0):0);
@@ -707,9 +731,9 @@ function solvePlan(halves,T,fine){   // fine: the final plan, polished (choosing
   fut.forEach((b,bi)=>{
     if(b.p!==lastP){av.forEach(p=>consec[p.id]=0);lastP=b.p}   // the quarter break is a rest
     const nb=fut[bi+1],lockNext=nb&&isLock(nb)&&nb.p===b.p?nb:null;  // a closer who comes on now stays on through the lock
-    if(!isLock(b))cumU+=b.dur;
-    const frac=Math.min(1,cumU/U);
+    if(!isLock(b))av.forEach(p=>cumU[p.id]+=b.dur*fw(p.id,b));
     const scoreOf=p=>{
+      const frac=fracOf(p.id);
       let sc=R[p.id]-Tn(p.id)*(1-frac);       // how far behind their fair share they'd be after this block
       if((oldPlan[b.key]||[]).includes(p.id))sc+=20; // stickiness: don't reshuffle the plan over small changes
       if(p.hot&&b.abs0<(p.hotUntil||0))sc+=1e6;  // hot: keep them on through the next block, rest pushed later
@@ -730,12 +754,12 @@ function solvePlan(halves,T,fine){   // fine: the final plan, polished (choosing
         const bad=G&&nElig(b.p)>=5?base.filter(id=>!cp(id,b.p)):[];   // Passerelle: a locked lineup with someone the rule bars: the mini sub takes them off
         let best=null,gain=bad.length?-Infinity:30;                  // only worth a sub if it closes at least 30s of gap
         base.forEach(o=>{if(bad.length&&!bad.includes(o))return;if(!bad.length&&P(o).hot&&b.abs0<(P(o).hotUntil||0))return;
-          av.forEach(p=>{if(base.includes(p.id)||!cp(p.id,b.p))return;
+          av.forEach(p=>{if(base.includes(p.id)||!cp(p.id,b.p)||barAt(b)&&weak(p.id))return;
             const strong=strongBase-(tierOf(o)<=2)+(p.tier<=2);
             if(strong<Math.min(floor,strongBase))return;
-            const t1n=t1Base-(tierOf(o)===1)+(p.tier===1);if(t1n<Math.min(t1Floor,t1Base))return;
+            const t1n=t1Base-(tierOf(o)===1)+(p.tier===1);if(t1n<Math.min(t1At(b),t1Base))return;
             const bhB=base.filter(isBH).length,bhn=bhB-isBH(o)+isBH(p.id);if(bhn<Math.min(bhF,bhB))return;
-            const pen=lowT&&p.tier===lowT?LOWPEN*base.filter(x=>x!==o&&tierOf(x)===lowT).length:0;
+            const lb=lowAt(b),pen=lb&&p.tier===lb?LOWPEN*base.filter(x=>x!==o&&tierOf(x)===lb).length:0;
             if(sc[p.id]-sc[o]-pen>gain){gain=sc[p.id]-sc[o]-pen;best=[o,p.id]}})});
         const chosen=best?base.map(x=>x===best[0]?best[1]:x):base.slice();
         chosen.forEach(id=>R[id]-=b.dur);plan[b.key]=chosen;prev=chosen;av.forEach(p=>consec[p.id]=chosen.includes(p.id)?consec[p.id]+b.dur:0);return;
@@ -746,17 +770,18 @@ function solvePlan(halves,T,fine){   // fine: the final plan, polished (choosing
     const elig=G?av.filter(p=>cp(p.id,b.p)):av;
     if(elig.length<5)elig.forEach(p=>{if(chosen.length<5&&!chosen.includes(p.id)){chosen.push(p.id);R[p.id]-=b.dur}});   // Passerelle short of eligible players (injury): all of them, then the rest
     const rest=(elig.length>=5?elig:av).filter(p=>!chosen.includes(p.id)).map(p=>({p,sc:scoreOf(p)})).sort((a,b2)=>b2.sc-a.sc);
-    const lowIn=()=>lowT?chosen.filter(id=>tierOf(id)===lowT).length:0;
+    const lb=lowAt(b),lowIn=()=>lb?chosen.filter(id=>tierOf(id)===lb).length:0;
     const take=x=>{chosen.push(x.p.id);R[x.p.id]-=b.dur};
     let t1=chosen.filter(id=>tierOf(id)===1).length;
-    for(const x of rest){if(chosen.length>=5||t1>=t1Floor)break;if(x.p.tier===1){take(x);t1++}}   // top-tier floor: never leave the court short of T1s
+    for(const x of rest){if(chosen.length>=5||t1>=t1At(b))break;if(x.p.tier===1){take(x);t1++}}   // top-tier floor: never leave the court short of T1s
     let bh=chosen.filter(isBH).length;
-    for(const x of [...rest.filter(x=>x.p.tier!==lowT),...rest.filter(x=>x.p.tier===lowT)]){if(chosen.length>=5||bh>=bhF)break;if(isBH(x.p.id)&&!chosen.includes(x.p.id)){take(x);bh++}}   // someone to bring the ball up (a lowest-tier ball-handler only if no one else can)
+    const lastBH=x=>x.p.tier===lowT||barAt(b)&&weak(x.p.id);
+    for(const x of [...rest.filter(x=>!lastBH(x)),...rest.filter(lastBH)]){if(chosen.length>=5||bh>=bhF)break;if(isBH(x.p.id)&&!chosen.includes(x.p.id)){take(x);bh++}}   // someone to bring the ball up (a lowest-tier ball-handler only if no one else can)
     let strong=chosen.filter(id=>tierOf(id)<=2).length;
     for(const x of rest){if(chosen.length>=5||strong>=floor)break;if(x.p.tier<=2&&!chosen.includes(x.p.id)){take(x);strong++}}
     while(chosen.length<5){   // fill the rest one at a time, so a 2nd lowest-tier player costs them their place unless they're really owed it
       let best=null,bs=-Infinity;
-      for(const x of rest){if(chosen.includes(x.p.id))continue;const v=x.sc-(x.p.tier===lowT?LOWPEN*lowIn():0);if(v>bs){bs=v;best=x}}
+      for(const x of rest){if(chosen.includes(x.p.id))continue;const v=x.sc-(lb&&x.p.tier===lb?LOWPEN*lowIn():0)-(barAt(b)&&weak(x.p.id)?BARPEN:0);if(v>bs){bs=v;best=x}}
       if(!best)break;take(best);
     }
     // continuity: at most K players change at once (mid-quarter; quarter breaks too if set). Rebuild from the five on court,
@@ -769,13 +794,13 @@ function solvePlan(halves,T,fine){   // fine: the final plan, polished (choosing
       for(let k=0;k<K;k++){
         let best=null,gain=0;const s1=cnt(id=>tierOf(id)<=2),t1n=cnt(id=>tierOf(id)===1);
         lu.forEach(o=>{if(P(o).hot&&b.abs0<(P(o).hotUntil||0))return;
-          av.forEach(p=>{if(lu.includes(p.id)||!cp(p.id,b.p))return;
+          av.forEach(p=>{if(lu.includes(p.id)||!cp(p.id,b.p)||barAt(b)&&weak(p.id))return;
             if(s1-(tierOf(o)<=2)+(p.tier<=2)<Math.min(floor,Math.max(s1,0)))return;
-            if(t1n-(tierOf(o)===1)+(p.tier===1)<Math.min(t1Floor,t1n))return;
+            if(t1n-(tierOf(o)===1)+(p.tier===1)<Math.min(t1At(b),t1n))return;
             {const bh0=lu.filter(isBH).length;if(bh0-isBH(o)+isBH(p.id)<Math.min(bhF,bh0))return}
-            const others=lowT?lu.filter(x=>x!==o&&tierOf(x)===lowT).length:0,pen=lowT&&p.tier===lowT?LOWPEN*others:0,relief=lowT&&tierOf(o)===lowT&&p.tier!==lowT?LOWPEN*others:0;   // splitting up two lowest-tier players is worth a swap
+            const lb=lowAt(b),others=lb?lu.filter(x=>x!==o&&tierOf(x)===lb).length:0,pen=lb&&p.tier===lb?LOWPEN*others:0,relief=lb&&tierOf(o)===lb&&p.tier!==lb?LOWPEN*others:0;   // splitting up two lowest-tier players is worth a swap
             const over=id=>Math.max(0,b.dur-Math.max(0,R[id]));   // seconds past their target if they play this block
-            const g=sc[p.id]-sc[o]-pen+relief+OVW*(over(o)-over(p.id))+(K===2&&p.tier===pt0&&pt0>=3&&R[p.id]>0?R[p.id]*frac:0)+(chosen.includes(p.id)?1:0);   // tie-break toward the unconstrained choice
+            const g=sc[p.id]-sc[o]-pen+relief+OVW*(over(o)-over(p.id))+(K===2&&p.tier===pt0&&pt0>=3&&R[p.id]>0?R[p.id]*fracOf(p.id):0)+(barAt(b)&&weak(o)?BARPEN:0)+(chosen.includes(p.id)?1:0);   // tie-break toward the unconstrained choice
             if(g>gain){gain=g;best=[o,p.id]}})});
         if(!best)break;lu[lu.indexOf(best[0])]=best[1];
       }
@@ -791,9 +816,10 @@ function solvePlan(halves,T,fine){   // fine: the final plan, polished (choosing
   const ok=(b,lu,i,soft)=>{   // soft: the lowest-tier guarantee may let the T1 floor dip to one T1 (their minutes come first)
       const was=(fb||plan)[b.key]||[];
       if(lu.filter(id=>tierOf(id)<=2).length<Math.min(floor,was.filter(id=>tierOf(id)<=2).length))return false;
-      if(lu.filter(id=>tierOf(id)===1).length<Math.min(soft?Math.min(1,t1Floor):t1Floor,was.filter(id=>tierOf(id)===1).length))return false;
+      if(lu.filter(id=>tierOf(id)===1).length<Math.min(soft?Math.min(1,t1At(b)):t1At(b),was.filter(id=>tierOf(id)===1).length))return false;
       if(lu.filter(isBH).length<Math.min(bhF,was.filter(isBH).length))return false;
-      if(lowT&&lu.filter(id=>tierOf(id)===lowT).length>1)return false;
+      if(lowAt(b)&&lu.filter(id=>tierOf(id)===lowT).length>1)return false;
+      if(barAt(b)&&lu.filter(weak).length>was.filter(weak).length)return false;
       if(G){
         if(lu.some(id=>!cp(id,b.p))&&nElig(b.p)>=5)return false;
         if(b.p<=2){const keep=plan[b.key];plan[b.key]=lu;const lost=was.some(id=>!lu.includes(id)&&G.g[id]===b.p&&!partQ(id,b.p));plan[b.key]=keep;if(lost)return false}   // nobody loses their only time in their quarter
@@ -882,9 +908,22 @@ function solvePlan(halves,T,fine){   // fine: the final plan, polished (choosing
   }
   const keys=new Set(B.map(b=>b.key));Object.keys(plan).forEach(k=>{if(!keys.has(k))delete plan[k]});
   // how far the whole plan lands from the targets, in minutes (sum of |projected − target|)
-  const err=cost(R)/60;
-  return {plan,err,low:lowShort(R)};
+  const err=cost(R)/60,out={plan,err,low:lowShort(R)};
+  // the lean is a preference: never at the cost of the targets (a plan more than a minute further off overall, or the lowest tier short)
+  // (noLean: 1 = without the focus; 0.5, 0.25 = a smaller lean, tried when the full one costs too much, e.g. switched on after Q1.
+  // Strong tries its T1/T2-only quarters first, then only the last of them, then the lean alone)
+  // The level is kept for the rest of the game (S.match.focusLvl): stepping back up mid-game would only undo the minutes already given
+  if(FZ&&fine&&!inGuard){const L=(FZ.strong?[[0,0],[0,2],[0,1],[0.5,1],[0.25,1]]:[[0,0],[0.5,1],[0.25,1]]).filter(([,nb])=>nb!==2||FZ.q.length>1);
+    let r0;inGuard=1;try{noLean=1;r0=solvePlan(halves,T,fine);
+      // T1/T2-only quarters are out of reach when the others' minutes can't fit outside them under the core floor: skip straight past
+      const lastQ=Math.max(...FZ.q),owedW=sum(av.filter(p=>weak(p.id)).map(p=>Math.max(0,R0[p.id]))),
+        roomW=nb=>sum(fut.filter(b=>!isLock(b)&&!(b.p<=4&&FZ.q.includes(b.p)&&(!nb||b.p===lastQ))).map(b=>b.dur*Math.max(0,5-floor)));
+      for(let i=Math.min(S.match.focusLvl||0,L.length);i<L.length;i++){const [k,nb]=L[i];if(FZ.strong&&nb!==1&&owedW>roomW(nb)+60)continue;noLean=k;noBar=nb;const x=i?solvePlan(halves,T,fine):out;
+        if(x.low<=r0.low&&x.err<=r0.err+1)return {...x,lvl:i}}
+    }finally{noLean=0;noBar=0;inGuard=0}return {...r0,dropped:1,lvl:L.length}}
+  return out;
 }
+let noLean=0,noBar=0,inGuard=0;
 // with at most 2 changing at once, fairness needs the extra one-player changes: allow at least 2 mini subs a quarter
 const miniSubsMax=()=>(+S.config.maxSubs===2)?Math.max(2,S.config.miniSubs|0):(S.config.miniSubs|0);
 function chooseHalves(T){
@@ -909,7 +948,7 @@ function chooseHalves(T){
   return halves;
 }
 // what the plan depends on apart from the clock and the subs made (a change here gets a fresh plan)
-const planSig=()=>JSON.stringify([availList().map(p=>[p.id,p.tier,st(p.id).fouls,!!p.hot,p.hotUntil||0,!!p.cold,!!p.bh]),S.config,S.closersIds,S.pinned,S.moves,S.periods,S.adj,(pGroups()||{}).g]);
+const planSig=()=>JSON.stringify([availList().map(p=>[p.id,p.tier,st(p.id).fouls,!!p.hot,p.hotUntil||0,!!p.cold,!!p.bh]),S.config,S.closersIds,S.pinned,S.moves,S.periods,S.adj,(pGroups()||{}).g,...(focusLean()?[S.match.focus]:[])]);   // focus only when on, so saves from before 2.25 keep their plan
 function replan(){
   const now=elapsedAbs(),av=availList(),ids=new Set(av.map(p=>p.id));
   S.onCourtIds=S.onCourtIds.filter(id=>ids.has(id));
@@ -919,7 +958,7 @@ function replan(){
   S.halves=chooseHalves(T);
   let r=solvePlan(S.halves,T,true);
   if(same&&hk(oldH)!==hk(S.halves)){const r2=solvePlan(oldH,T,true);if(r2.low<r.low||r2.low===r.low&&r2.err<=r.err){r=r2;S.halves={...oldH}}}   // keep the mini subs already planned unless changing them does better
-  S.plan=r.plan;S.planSig=planSig();
+  S.plan=r.plan;S.planSig=planSig();S.focusDropped=!!r.dropped;if(focusLean())S.match.focusLvl=r.lvl||0;   // the quarter focus would have cost minutes: planned without it
   const fut=blocksAll().filter(b=>b.abs0>=now);
   if(!S.started&&fut[0])S.onCourtIds=(S.plan[fut[0].key]||[]).slice();
 }
@@ -1312,6 +1351,7 @@ function rotationCard(){
   t+=S.config.shiftLength+'-min blocks'+(S.config.miniSubs?' + mini subs':'')+' · sub on the dead ball nearest each time · keep '+S.config.strongFloor+'+ core on court\n';
   if(pText())t+=pText()+'\n';
   if(captOf())t+='Captain: '+shortName(captOf())+'\n';
+  if(focusLean())t+='Quarter focus: '+focusText()+'\n';
   if(S.started)t+='(from '+clockLabel()+', current five: '+nm(S.onCourtIds)+')\n';
   t+='------------------------------------\n';
   let prev=S.started?S.onCourtIds.slice():null;
@@ -1665,7 +1705,7 @@ function viewLive(){
   const lock=inLockLive();
   const rl=(+S.config.restMaxMins||0)*60,tired=p=>rl&&st(p.id).consecutiveSeconds>=rl?1:0;
   const dueRank=on.filter(p=>!p.hot).sort((a,b)=>(b.cold-a.cold)||(tired(b)-tired(a))||(foulRisk(b.id)-foulRisk(a.id))||(pace(b.id)-pace(a.id)));
-  const strongOn=on.filter(p=>p.tier<=2).length,floor=S.config.strongFloor,t1On=on.filter(p=>p.tier===1).length,t1F=t1FloorEff();
+  const strongOn=on.filter(p=>p.tier<=2).length,floor=S.config.strongFloor,t1On=on.filter(p=>p.tier===1).length,t1F=t1FloorAt(S.period);
   const nextRank=bench.slice().sort((a,b)=>(a.cold-b.cold)||(foulRisk(a.id)-foulRisk(b.id))||(pace(a.id)-pace(b.id)));
   let next=nextRank[0];
   if(dueRank[0]&&dueRank[0].tier<=2&&strongOn<=floor){const s=nextRank.find(p=>p.tier<=2);if(s)next=s}
@@ -1805,12 +1845,12 @@ function viewPlan(){
     const nm=`<b>#${p.num??'?'}</b> ${esc(p.name)} <span class="tier t${p.tier}">T${p.tier}</span>${swapList(p.id).length?' <span class="chip acc">⇄</span>':''}`;
     return `<tr><td>${swapOk&&swapMates(p.id).length?`<button class="pnm" data-act="swap:${p.id}" aria-label="Swap court time for #${p.num??'?'}">${nm}</button>`:nm}${PG&&p.id in PG.g?` <span class="muted small">${({1:'Q1',2:'Q2',0:'no 2nd half'})[PG.g[p.id]]}</span>`:''}</td>`+B.map(b=>`<td class="${cls(b)}"><span class="cell ${(S.plan[b.key]||[]).includes(p.id)?'f'+p.tier:''}"></span></td>`).join('')+
     `<td>${m1(T[p.id]||0)}</td><td>${m1(pl)}</td><td class="${Math.abs(d)>S.config.shiftLength/2+0.01?'lowcore':'muted'}">${d>=0?'+':''}${m1(d)}</td></tr>`}).join('');
-  const t1F=t1FloorEff(T),t1row='<tr><td class="muted">T1s on</td>'+B.map(b=>{const c=(S.plan[b.key]||[]).filter(id=>tierOf(id)===1).length;return `<td class="${cls(b)} ${c<t1F?'lowcore':'muted'}">${c}</td>`}).join('')+'<td></td><td></td><td></td></tr>';
+  const t1row='<tr><td class="muted">T1s on</td>'+B.map(b=>{const c=(S.plan[b.key]||[]).filter(id=>tierOf(id)===1).length;return `<td class="${cls(b)} ${c<t1FloorAt(b.p,T)?'lowcore':'muted'}">${c}</td>`}).join('')+'<td></td><td></td><td></td></tr>';
   const bhrow=bhFloorEff()?'<tr><td class="muted">Ball-handlers</td>'+B.map(b=>{const c=(S.plan[b.key]||[]).filter(id=>isBHp(P(id))).length;return `<td class="${cls(b)} ${c<bhFloorEff()?'lowcore':'muted'}">${c}</td>`}).join('')+'<td></td><td></td><td></td></tr>':'';
   const core='<tr><td class="muted">Core (T1+T2)</td>'+B.map(b=>{const c=(S.plan[b.key]||[]).filter(id=>tierOf(id)<=2).length;return `<td class="${cls(b)} ${c<S.config.strongFloor?'lowcore':'muted'}">${c}</td>`}).join('')+'<td></td><td></td><td></td></tr>';
   return `<h2>Rotation plan</h2>${coreWarn()?`<div class="banner pause fdb"><span>⚠ ${esc(coreWarn())}</span><div class="pbtns"><button class="btn sm" data-act="cfg:strongFloor:${coreShort(baseTargets()).floor-1}">Set core floor to ${coreShort(baseTargets()).floor-1}</button></div></div>`:''}
   <div class="legend"><span>↳ = mini sub (one change mid-block)</span><span><i style="background:var(--t1)"></i>T1 Core</span><span><i style="background:var(--t2)"></i>T2 Rotation</span><span><i style="background:var(--t3)"></i>T3 Development</span><span><i style="background:var(--t4)"></i>T4 Emerging</span><span>🔒 Closers block</span><span>📌 Lineup you locked</span><span>* Change time moved</span></div>
-  <p class="note" style="margin-top:0">${S.finished?'':`<button class="btn sm" data-act="swap">⇄ Swap court time</button> Tap a player’s name to swap their slots with a teammate in the same tier. `}Tap a block's time to lock its lineup or move the change earlier or later.${PG?` <b>Passerelle:</b> Q1 group ${PG.n1}, Q2 group ${PG.n2} (change them on the <button class="btn sm ghost" data-act="sheet:gameday">Game-day sheet</button>).`:''}</p>${pShort()?`<p class="note" style="color:var(--warn)">⚠ ${esc(pShort())}</p>`:''}
+  ${focusLean()?`<p class="note" style="margin-top:0"><b>Quarter focus ${esc(focusText())}</b>${S.focusDropped?': no room in this game without costing minutes, so the plan is as normal.':` · T1/T2 on court: ${coreByQ()}.`} <button class="btn sm ghost" data-act="sheet:focus">Change</button></p>`:S.finished?'':`<p class="note" style="margin-top:0"><button class="btn sm" data-act="sheet:focus">◎ Quarter focus</button> Give the strongest line-ups to the quarters you pick, e.g. Q3 + Q4. Nobody’s minutes change.</p>`}<p class="note" style="margin-top:0">${S.finished?'':`<button class="btn sm" data-act="swap">⇄ Swap court time</button> Tap a player’s name to swap their slots with a teammate in the same tier. `}Tap a block's time to lock its lineup or move the change earlier or later.${PG?` <b>Passerelle:</b> Q1 group ${PG.n1}, Q2 group ${PG.n2} (change them on the <button class="btn sm ghost" data-act="sheet:gameday">Game-day sheet</button>).`:''}</p>${pShort()?`<p class="note" style="color:var(--warn)">⚠ ${esc(pShort())}</p>`:''}
   <div class="tbl"><table class="pg"><thead><tr>${head}</tr></thead><tbody>${body}${t1row}${bhrow}${core}</tbody></table></div>
   <h2>Rotation card</h2>
   <p class="note" style="margin-top:0">The plan as plain text for an assistant or the bench. Copy it into WhatsApp before the game; it updates as the plan changes.</p>
@@ -1820,6 +1860,24 @@ function viewPlan(){
   <p class="note">${S.config.shiftLength}-minute blocks, at least ${S.config.strongFloor} core players per block. This plan is advice: it re-solves from the current clock after every sub, foul-out, hot/cold call or attendance change. Plan vs target can differ by up to ${mt(S.config.shiftLength/2)} min — that's expected. The game clock is the only record used in exports.</p>`;
 }
 // Game-day sheet: who plays Q1 and who plays Q2. Tap to move a player; with 5 in a group, tap one in each group to swap them
+// T1+T2 player-minutes in each quarter: played so far, plus the plan for the rest
+function coreSecsQ(){const now=elapsedAbs(),q=[0,0,0,0],core=id=>tierOf(id)<=2;   // T1+T2 seconds on court per quarter, played and planned
+  S.roster.filter(p=>p.tier<=2).forEach(p=>(st(p.id).periodSplit||[]).slice(0,4).forEach((x,i)=>q[i]+=x||0));
+  blocksAll().forEach(b=>{if(b.abs1<=now||b.p>4)return;(S.plan[b.key]||[]).filter(core).forEach(()=>q[b.p-1]+=b.abs0>=now?b.dur:b.abs1-now)});
+  return q}
+const coreByQ=()=>coreSecsQ().map((x,i)=>qLabel(i+1)+' '+Math.round(x/60)).join(' · ')+' of '+Math.round(5*S.periods[0]/60)+' min';
+const focusShort=()=>{const f=focusLean();if(!f||!f.strong||S.focusDropped)return false;const q=coreSecsQ();return f.q.some(x=>q[x-1]<5*S.periods[x-1]-30)};   // Strong couldn't make every focus minute T1/T2
+function focusHtml(m){   // m: undefined (Game-day sheet), 'sheet' (its own sheet: no label), 'break' (quarter-break sheet: short)
+  const f=S.match.focus||{q:[3,4],lv:''},on=!!FOCUS_A[f.lv],qs=f.q.map(qLabel).join(' + ');
+  const hint=m==='break'&&!(on&&(!focusLean()||S.focusDropped))?(on?'':'Strongest line-ups in the quarters you pick. Nobody’s minutes change.'):!on?'Lean the stronger tiers into the quarters that matter most, e.g. Q3 + Q4. Everyone keeps their minutes.'
+    :!focusLean()?'Pick one to three quarters.'
+    :S.focusDropped?'There’s no room for it in this game without costing someone minutes, so the plan is as normal.'
+    :f.lv==='light'?`T1s and T2s play more of their minutes in ${qs}, the lowest tier more in the other quarters (where they may share the court). Everyone keeps their minutes.`
+    :`Only T1s and T2s play ${qs}, and one T1 is enough outside them. Minutes can land a little further from target, never the lowest tier’s.${focusShort()?` Here the others’ minutes don’t all fit outside ${qs} (with your core floor), so a few of them stay in.`:''}`;
+  return `<div class="field" style="margin-top:10px">${m==='sheet'?'':'<label>Quarter focus</label>'}
+    <div class="seg">${[['off','Off'],['light','Light'],['strong','Strong']].map(([v,l])=>`<button data-act="focuslv:${v}" aria-pressed="${(f.lv||'off')===v}">${l}</button>`).join('')}</div>
+    ${on?`<div class="seg" style="margin-top:6px">${[1,2,3,4].map(q=>`<button data-act="focusq:${q}" aria-pressed="${f.q.includes(q)}">Q${q}</button>`).join('')}</div>`:''}
+    ${hint?`<span class="muted small">${hint}</span>`:''}${focusLean()&&!S.focusDropped?`<span class="muted small">T1/T2 on court: ${coreByQ()}.</span>`:''}</div>`}
 function pGroupsHtml(){
   if(pShort())return `<p class="note" style="color:var(--warn)">⚠ ${esc(pShort())}</p>`;
   const G=pGroups();if(!G)return '';const edit=!S.started,sel=ui.pgSel;
@@ -1992,7 +2050,7 @@ function renderSheet(){
     if(early){h=`<h2>End ${qLabel(S.period)} now?</h2><p class="muted">The app clock still shows ${mmss(S.clockSeconds)}. Use this if the table clock has hit zero.</p>
       <div class="stack"><button class="btn pri" data-act="endnow">End ${qLabel(S.period)}</button><button class="btn ghost" data-act="close">Keep playing</button></div>`}
     else if(!last){
-      h=`<h2>${qLabel(S.period)} done</h2>${S.period===2?halfTimeCard():''}${scoreLine()?`<p><b>${esc(scoreLine())}</b> <span class="muted small">· ${qLabel(S.period)} ${scoreByQ()[S.period-1].us}–${scoreByQ()[S.period-1].them}</span> <button class="btn sm" data-act="sheet:score">Edit score</button></p>`:`<p><button class="btn sm" data-act="sheet:score">Log the score</button></p>`}${n&&n.ins.length&&n.b.p===S.period+1&&n.b.s===0?`<p>Plan for the start of ${qLabel(S.period+1)}:</p><div class="swaps">${swapRows(n)}</div>`:'<p class="muted">Plan keeps the same five.</p>'}
+      h=`<h2>${qLabel(S.period)} done</h2>${S.period===2?halfTimeCard():''}${scoreLine()?`<p><b>${esc(scoreLine())}</b> <span class="muted small">· ${qLabel(S.period)} ${scoreByQ()[S.period-1].us}–${scoreByQ()[S.period-1].them}</span> <button class="btn sm" data-act="sheet:score">Edit score</button></p>`:`<p><button class="btn sm" data-act="sheet:score">Log the score</button></p>`}${n&&n.ins.length&&n.b.p===S.period+1&&n.b.s===0?`<p>Plan for the start of ${qLabel(S.period+1)}:</p><div class="swaps">${swapRows(n)}</div>`:'<p class="muted">Plan keeps the same five.</p>'}${S.period<4?focusHtml('break'):''}
       <div class="stack" style="margin-top:10px">${n&&n.ins.length&&n.b.p===S.period+1&&n.b.s===0?'<button class="btn" data-act="qswap">Apply planned lineup ⚡</button>':''}<button class="btn pri" data-act="nextp">Ready for ${qLabel(S.period+1)}</button><button class="btn ghost" data-act="close">Close</button></div>`}
     else h=`<h2>${qLabel(S.period)} done</h2><p class="muted">${scoreLine()?scoreLine()+'. ':''}Scores level? Add overtime. Otherwise call full time.</p>
       <div class="stack"><button class="btn" data-act="ot:${S.config.otLengthMins}">+${S.config.otLengthMins} min overtime</button>
@@ -2119,6 +2177,8 @@ function renderSheet(){
     h=`<h2>Restore from a backup</h2><p class="muted small">Paste the text that starts <b>PUMAS-BACKUP-1:</b>. It goes into <b>${esc(tfull())}</b>: games already here are kept; missing ones are added. A backup of a different team? Restore it as a new team.</p>
     <textarea id="rsText" placeholder="PUMAS-BACKUP-1:…" style="min-height:120px"></textarea>
     <div class="stack" style="margin-top:8px"><button class="btn pri" data-act="rsgo:0">Add the games</button><button class="btn" data-act="rsgo:1" ${S.started?'disabled':''}>Add the games + restore squad &amp; settings${S.started?' (after this game)':''}</button><button class="btn" data-act="rsgo:new" ${teamBusy()?'disabled':''}>Restore as a new team</button><button class="btn ghost" data-act="close">Cancel</button></div>`;
+  }else if(ui.sheet==='focus'){
+    h=`<h2>Quarter focus</h2><p class="muted small" style="margin-top:-6px">This game only${S.started?' · the rest of the game is re-planned':''}</p>${focusHtml('sheet')}<button class="btn pri" style="width:100%;margin-top:10px" data-act="close">Done</button>`;
   }else if(ui.sheet==='gameday'){
     const rows=S.roster.slice().sort((a,b)=>a.tier-b.tier||a.num-b.num),nS=S.roster.filter(p=>p.starter&&p.active).length,nA=availList().length,mx=panelMax(),over=panelOver(),so=satOut();
     h=`<h2>Game-day setup</h2><p class="muted small" style="margin-top:-6px">${esc(tfull())}${TM.ids.length>1?' · <button class="btn sm ghost" data-act="sheet:teams">Switch team</button>':''}</p>
@@ -2132,6 +2192,7 @@ function renderSheet(){
     <div class="gdl">${rows.map(p=>`<div class="gdr ${p.active?'':'off'}"><button class="btn gdh" data-act="gdhere:${p.id}" aria-pressed="${p.active}">${p.active?'✓':'✕'} <b>#${p.num??'?'}</b> <s>${esc(p.name)}</s> <span class="tier t${p.tier}">T${p.tier}</span>${so[p.num]?`<span class="muted small gso">sat out ${so[p.num]}</span>`:''}</button>${p.active||S.started?`<button class="tog c" data-act="gdstart:${p.id}" aria-pressed="${!!p.starter&&p.active}" ${p.active?'':'disabled'}>S</button>`:`<button class="tog c gdwhy" data-act="gdnp:${p.id}" aria-label="${p.np?'Not picked, tap for not here':'Not here, tap for not picked'}">${p.np?'Not<br>picked':'Not<br>here'}</button>`}</div>`).join('')}</div>
     ${S.started?'<p class="note">The game has started: marking someone out now counts as an injury (their minutes so far are kept).</p>':''}
     <div class="field" style="margin-top:10px"><label for="captsel">Captain</label><select id="captsel" data-chg="capt"><option value="">None</option>${S.roster.slice().sort((a,b)=>(a.num??999)-(b.num??999)).map(p=>`<option value="${p.id}" ${p.capt?'selected':''}>#${p.num??'?'} ${esc(p.name)}</option>`).join('')}</select><span class="muted small">Shown as (Capt.) on the rotation sheet, the rotation card and the summary. The glance screen says when they’re on the bench, so you can name a floor captain.</span></div>
+    ${focusHtml()}
     ${S.config.passerelle?pGroupsHtml():''}
     ${swapList().length?`<p class="small" style="margin:10px 0 4px"><b>Court-time swaps</b> (this game · make them on the Plan tab)</p><div class="stack">${swapList().map(w=>`<button class="btn ghost" data-act="swapclr:${w.k}">#${P(w.a).num??'?'} ⇄ #${P(w.b).num??'?'} · Undo</button>`).join('')}</div>`:''}
     <button class="btn pri" style="width:100%;margin-top:10px" data-act="close">Done${nS===5||S.started?'':' (pick 5 starters)'}${over?` · ${nA} picked, limit ${mx}`:''}</button>`;
@@ -2216,9 +2277,9 @@ function chgMoveHtml(){
     <div class="grid2" style="margin-top:8px"><input id="chgv" type="text" inputmode="numeric" placeholder="went on at mm:ss" style="min-height:48px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:0 12px"><button class="btn" data-act="chgset">Move</button></div>
     <p class="note">Between ${mmss(L.hi)}${(()=>{const C=chgList(),p=C.length>1?C[C.length-2].c:len();return L.hi>=p-0.5?' ('+(C.length>1?'the change before':'start of '+qLabel(S.period))+')':''})()} and ${mmss(L.lo)}${L.lo<=S.clockSeconds+0.5?' (now)':''}.</p>`}
 /* ---------- debug trace: every engine action + what the app believed afterwards ---------- */
-const APP_VERSION='2.24.0 · 2026-11-15';
+const APP_VERSION='2.25.0 · 2026-11-17';
 let dbgDepth=0;
-function dbgInit(){S.debug={app:APP_VERSION,created:new Date().toISOString(),start:{config:JSON.parse(JSON.stringify(S.config)),roster:JSON.parse(JSON.stringify(S.roster)),closersIds:S.closersIds.slice(),periods:S.periods.slice()},ev:[]}}
+function dbgInit(){S.debug={app:APP_VERSION,created:new Date().toISOString(),start:{config:JSON.parse(JSON.stringify(S.config)),roster:JSON.parse(JSON.stringify(S.roster)),closersIds:S.closersIds.slice(),periods:S.periods.slice(),focus:S.match.focus||null},ev:[]}}
 const ids2n=a=>(a||[]).map(id=>{const p=P(id);return p?p.num:id});
 function dbgSnap(){
   const n=nextPlanned(),lc=liveCalls(),T=targets(),now=elapsedAbs(),plan={},tg={},secs={},fouls={};
@@ -2247,7 +2308,7 @@ function traced(name,fn){return function(...args){
 doSub=traced('doSub',doSub);quickSwap=traced('quickSwap',quickSwap);skipPlanned=traced('skipPlanned',skipPlanned);
 addFoul=traced('addFoul',addFoul);undoFoul=traced('undoFoul',undoFoul);undo=traced('undo',undo);
 startClock=traced('startClock',startClock);pauseClock=traced('pauseClock',pauseClock);resync=traced('resync',resync);tableGo=traced('tableGo',tableGo);tableCancel=traced('tableCancel',tableCancel);moveChange=traced('moveChange',moveChange);
-swapSlots=traced('swapSlots',swapSlots);swapClear=traced('swapClear',swapClear);setActive=traced('setActive',setActive);setNotPicked=traced('setNotPicked',setNotPicked);setHot=traced('setHot',setHot);confirmHot=traced('confirmHot',confirmHot);setCold=traced('setCold',setCold);
+swapSlots=traced('swapSlots',swapSlots);swapClear=traced('swapClear',swapClear);setActive=traced('setActive',setActive);setNotPicked=traced('setNotPicked',setNotPicked);setFocus=traced('setFocus',setFocus);setHot=traced('setHot',setHot);confirmHot=traced('confirmHot',confirmHot);setCold=traced('setCold',setCold);
 startNextPeriod=traced('startNextPeriod',startNextPeriod);pinBlock=traced('pinBlock',pinBlock);addScore=traced('addScore',addScore);callTimeout=traced('callTimeout',callTimeout);importGame=traced('importGame',importGame);unpinBlock=traced('unpinBlock',unpinBlock);moveBoundary=traced('moveBoundary',moveBoundary);adjMins=traced('adjMins',adjMins);addTeamFoulThem=traced('addTeamFoulThem',addTeamFoulThem);scoreMinus=traced('scoreMinus',scoreMinus);setScorer=traced('setScorer',setScorer);addOT=traced('addOT',addOT);endPeriodEarly=traced('endPeriodEarly',endPeriodEarly);fullTime=traced('fullTime',fullTime);
 // Compact trace (pumas-debug-2): each event keeps only what changed since the one before, then the whole thing is
 // gzipped and base64'd so a full game fits a phone clipboard / chat paste. Long traces are split into parts.
@@ -2337,6 +2398,8 @@ function act(a,e){
     case 'to':callTimeout(id);break;
     case 'archive':archiveGame();render();toast('Saved to the season');break;
     case 'practice':S.match.practice=id==='1';save();render();break;
+    case 'focuslv':{const f=S.match.focus||{q:[3,4]};setFocus(f.q.length?f.q:[3,4],id==='off'?'':id);break}
+    case 'focusq':{const f=S.match.focus||{q:[3,4],lv:''},q=+id;setFocus(f.q.includes(q)?f.q.filter(x=>x!==q):[...f.q,q],f.lv);break}
     case 'glance':ui.glance=id==='1';render();break;
     case 'awaketry':ui.sheet=null;requestWake().then(()=>{renderSheet();render();toast(ui.awake!=='none'?'Screen will stay on':'Your phone said no — use the settings tip')});break;
     case 'gsc':addScore(id,+v);break;
