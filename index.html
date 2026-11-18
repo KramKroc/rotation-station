@@ -435,7 +435,10 @@ const st=id=>(S.stats[id]||(S.stats[id]=blankStat()));
 const played=id=>st(id).playedSeconds;
 const tierOf=id=>(P(id)||{tier:4}).tier;
 const len=()=>S.periods[S.period-1];
-const qLabel=p=>p<=4?'Q'+p:'OT'+(p-4);
+const scrim=()=>!!(S.match&&S.match.scrim);   // training scrimmage: two halves (S.match.scrim = their length in minutes), no closers lock, no timeout limits, not saved to the season
+const NREG=()=>scrim()?2:4;   // regular periods: four quarters, or a scrimmage's two halves
+const perWord=()=>scrim()?'half':'quarter';
+const qLabel=p=>p<=NREG()?(scrim()?'H':'Q')+p:'OT'+(p-NREG());
 const mmss=s=>{s=Math.max(0,Math.ceil(s-1e-6));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')};
 const mmssShort=s=>{s=Math.max(0,Math.round(s));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
 const m1=x=>(Math.round(x*10)/10).toFixed(1);
@@ -450,8 +453,8 @@ const curBlock=()=>{const now=elapsedAbs();return blocksAll().find(b=>b.abs0<now
 const snap=()=>({applied:{...S.applied},fixed:JSON.parse(JSON.stringify(S.fixed)),plan:JSON.parse(JSON.stringify(S.plan||{})),halves:{...(S.halves||{})},early:{...(S.early||{})}});
 const restoreSnap=u=>{if(u.applied)S.applied=u.applied;if(u.fixed)S.fixed=u.fixed;if(u.plan)S.plan=u.plan;if(u.halves)S.halves=u.halves;if(u.early)S.early=u.early};
 const availList=()=>S.roster.filter(p=>p.active&&!st(p.id).fouledOut);
-function foulRisk(id){const s=st(id);if(s.fouledOut)return false;const f=s.fouls;return f>=4||(S.period<=2&&f>=2)||(S.period<=3&&f>=3)}
-function inLockLive(){const L=S.config.closerLockSeconds;if(!L)return false;if(S.period===4)return S.clockSeconds<=L&&S.clockSeconds>0;if(S.period>4)return S.config.lockOT;return false}
+function foulRisk(id){const s=st(id);if(s.fouledOut)return false;const f=s.fouls;return scrim()?f>=4||S.period===1&&f>=3:f>=4||(S.period<=2&&f>=2)||(S.period<=3&&f>=3)}
+function inLockLive(){const L=S.config.closerLockSeconds;if(!L||scrim())return false;if(S.period===4)return S.clockSeconds<=L&&S.clockSeconds>0;if(S.period>4)return S.config.lockOT;return false}
 
 /* ---------- Passerelle (a U12/U14 rotation rule in some leagues) ----------
    Q1 and Q2 are played by different groups (nobody plays both), and only players who took part in the 1st half can play the 2nd half.
@@ -459,7 +462,7 @@ function inLockLive(){const L=S.config.closerLockSeconds;if(!L)return false;if(S
 const pIn=(id,q)=>(st(id).periodSplit[q-1]||0)>0;   // took part in quarter q
 const qOver=q=>S.period>q||S.started&&S.period===q&&S.clockSeconds<=0;
 const pN=()=>S.started?S.roster.filter(p=>p.active||played(p.id)>0).length:availList().length;
-const pOn=()=>!!S.config.passerelle&&pN()>=10;   // it needs 10: with fewer, the app plans as normal
+const pOn=()=>!!S.config.passerelle&&pN()>=10&&!scrim();   // it needs 10: with fewer, the app plans as normal
 const subPeriod=()=>S.started&&S.clockSeconds<=0&&S.period<S.periods.length?S.period+1:S.period;   // at a break, subs are for the next quarter
 // id → 1 (Q1 group), 2 (Q2 group) or 0 (didn't play the 1st half, so can't play the 2nd). What has been played decides first,
 // then the coach's choices on the Game-day sheet, then an even split balanced by tier and ball-handlers (starters lean to Q1).
@@ -509,7 +512,7 @@ const protectedTier=()=>{const t=availList().map(p=>p.tier);return t.length?Math
 // quarter focus (this game only, S.match.focus = {q:[3,4], lv:'light'|'strong'}): how far each player's minutes lean into the
 // focus quarters. T1s +1, T2s +½, T3s −½, the lowest tier −1 (away from them). Off, or every quarter picked: null
 const FOCUS_A={light:0.3,strong:0.6};   // strong also relaxes the line-up rules outside the focus quarters (see solvePlan)
-function focusLean(){const f=S.match&&S.match.focus;if(!f||!FOCUS_A[f.lv]||!f.q||!f.q.length||f.q.length>=4)return null;
+function focusLean(){const f=S.match&&S.match.focus;if(scrim()||!f||!FOCUS_A[f.lv]||!f.q||!f.q.length||f.q.length>=4)return null;
   const pt=protectedTier(),k={};availList().forEach(p=>k[p.id]=p.tier===1?1:p.tier===pt?-1:p.tier===2?0.5:-0.5);return {q:f.q,a:FOCUS_A[f.lv],k,strong:f.lv==='strong'}}
 const focusOut=p=>{const f=focusLean();return f&&p<=4&&!f.q.includes(p)?f:null};   // quarter p is outside the focus quarters
 const t1FloorAt=(p,T)=>{const f=focusOut(p);return f&&f.strong?Math.min(1,t1FloorEff(T)):t1FloorEff(T)};
@@ -522,6 +525,21 @@ function setFocus(q,lv){
   if(JSON.stringify(focusLean()&&S.match.focus)!==was)log((S.started?clockLabel()+' — ':'')+(focusLean()?'QUARTER FOCUS: '+focusText():'Quarter focus off')+', plan redone','rp');
   replan();save();render();
 }
+// scrimmage: two halves of m minutes (0: back to a normal game of four quarters). Before tip-off only
+function newPeriods(per){S.periods=per;S.period=1;S.clockSeconds=per[0];S.plan={};S.fixed={};S.applied={};S.halves={};S.pinned={};S.moves={};S.qGrid={}}
+function setScrim(m){
+  if(S.started){toast('A scrimmage can’t be switched once the game has started');return false}
+  m=SCRIM_MINS.includes(+m)?+m:0;if(m===(S.match.scrim||0))return true;
+  const sd=swapDropAll('Scrimmage');
+  S.match.scrim=m;if(m)S.match.practice=true;
+  newPeriods(m?[m*60,m*60]:Array(4).fill(S.config.quarterMins*60));
+  log(m?'SCRIMMAGE: 2 × '+m+' min, not saved to the season':'Scrimmage off: '+S.config.quarterMins+'-minute quarters');
+  replan();save();render();if(sd)toast('Court-time swaps cleared');return true;
+}
+const SCRIM_MINS=[10,12,15,20];
+function scrimHtml(){const m=S.match.scrim||0,lock=S.started?'disabled':'';
+  return m?`<div class="field" style="margin-top:8px"><label>Each half</label><div class="seg">${SCRIM_MINS.map(x=>`<button data-act="scrimlen:${x}" aria-pressed="${m===x}" ${lock}>${x} min</button>`).join('')}</div>
+    <span class="muted small">Two halves, subs every ${S.config.shiftLength} min as usual. No closers lock, no timeout limits, team fouls count per half, and it isn’t saved to the season.</span></div>`:''}
 function baseTargets(){
   const G=pGroups(),pool=5*sum(S.periods)/60,T={},av=availList().filter(p=>!G||G.g[p.id]!==0),ids=new Set(av.map(p=>p.id));   // Passerelle: no 1st half, no more minutes
   let frozen=0;
@@ -548,7 +566,7 @@ function seasonOwed(){   // num → minutes owed (season minutes short of season
   cuCache={k,v:out};return out;
 }
 function catchUp(){
-  const cap=+S.config.catchUp||0,res={give:{},take:{}};if(!cap)return res;
+  const cap=scrim()?0:+S.config.catchUp||0,res={give:{},take:{}};if(!cap)return res;   // a scrimmage isn't saved, so it doesn't pay anything back
   const owed=seasonOwed(),av=availList(),pt=protectedTier();
   av.forEach(p=>{const o=owed[p.num];if(o&&o.gt&&o.dt/o.gt< -1){const b=Math.min(cap,Math.floor(-o.dt/2*2)/2);if(b>=0.5)res.give[p.id]=b}});
   let need=sum(Object.values(res.give));if(!need)return res;
@@ -606,7 +624,7 @@ function targets(){
 function coreShort(T){
   const av=availList().filter(p=>!p.cold),core=av.filter(p=>p.tier<=2),fl=Math.min(+S.config.strongFloor||0,core.length,5);
   // the closers lock is its own case: every core closer is on for all of it, however many that is
-  const L4=S.periods[3]||0,lk=Math.min(L4,+S.config.closerLockSeconds||0)/60;
+  const L4=scrim()?0:S.periods[3]||0,lk=Math.min(L4,+S.config.closerLockSeconds||0)/60;
   const cc=lk?Math.max(fl,(S.closersIds||[]).filter(id=>core.some(p=>p.id===id)).length):fl;
   const need=fl*(sum(S.periods)/60-lk)+cc*lk,have=sum(core.map(p=>T[p.id]||0));
   return {core,floor:fl,need,have,short:Math.max(0,need-have),lockCore:cc>fl};
@@ -633,7 +651,7 @@ function shiftHint(qm,sl){
 }
 // a quarter keeps the block grid it was played on (shift length, closers lock), so a change at a break only reshapes the quarters to come
 const qGridOf=p=>((S.qGrid||{})[p])||{step:S.config.shiftLength*60,lock:+S.config.closerLockSeconds||0};
-function qGridRec(){if(S.period<=4&&!(S.qGrid=S.qGrid||{})[S.period])S.qGrid[S.period]={step:S.config.shiftLength*60,lock:+S.config.closerLockSeconds||0}}
+function qGridRec(){if(S.period<=NREG()&&!(S.qGrid=S.qGrid||{})[S.period])S.qGrid[S.period]={step:S.config.shiftLength*60,lock:+S.config.closerLockSeconds||0}}
 // settings that set the block grid can't change while a quarter is under way: they'd move the next change under the coach
 const GRID_KEYS=['shiftLength','closerLockSeconds','miniSubs'];
 const qUnderway=()=>S.started&&!S.finished&&S.clockSeconds>0&&S.clockSeconds<len();
@@ -641,9 +659,9 @@ function baseBlocks(){
   const out=[];let abs=0;
   S.periods.forEach((L,pi)=>{
     const p=pi+1;
-    if(p>4){out.push({p,s:0,e:L,dur:L,abs0:abs,abs1:abs+L,key:p+'-0'})}
+    if(p>NREG()){out.push({p,s:0,e:L,dur:L,abs0:abs,abs1:abs+L,key:p+'-0'})}
     else{
-      const g=qGridOf(p),step=g.step,lockAt=p===4&&g.lock>0?Math.max(0,L-g.lock):L;
+      const g=qGridOf(p),step=g.step,lockAt=p===4&&!scrim()&&g.lock>0?Math.max(0,L-g.lock):L;
       const cuts=shiftCuts(lockAt,step);
       if(lockAt<L)cuts.push(lockAt);
       // a coach can move a change earlier/later; the block keeps its original key so plans and pins survive the move
@@ -672,7 +690,7 @@ function blocksAll(halves){
   return out;
 }
 const blockLabel=b=>qLabel(b.p)+' '+mmssShort(S.periods[b.p-1]-b.s)+'–'+mmssShort(S.periods[b.p-1]-b.e);
-function inLockBlock(b){const L=b.p===4?qGridOf(4).lock:S.config.closerLockSeconds;if(!L)return false;if(b.p===4)return b.s>=S.periods[3]-L;if(b.p>4)return S.config.lockOT;return false}
+function inLockBlock(b){if(scrim())return false;const L=b.p===4?qGridOf(4).lock:S.config.closerLockSeconds;if(!L)return false;if(b.p===4)return b.s>=S.periods[3]-L;if(b.p>4)return S.config.lockOT;return false}
 
 // ball-handler floor, limited to how many tagged ball-handlers are available
 // the lowest tier's ball-handlers count only if nobody else can do it (forcing them on would cost the other lowest-tier players minutes)
@@ -727,7 +745,7 @@ function solvePlan(halves,T,fine){   // fine: the final plan, polished (choosing
   const foulPen=(p,b)=>{if(!fa||fa==='off'||isLock(b))return 0;
     if(fa!=='strict'&&b.key===firstKey)return 0;            // gentle: never change the very next sub because of fouls
     const f=st(p.id).fouls;
-    return f>=4?420:f>=3&&b.p<=3?300:f>=2&&b.p<=2?300:0};   // push foul trouble later, keep them for Q4
+    return f>=4?420:scrim()?(f>=3&&b.p===1?300:0):f>=3&&b.p<=3?300:f>=2&&b.p<=2?300:0};   // push foul trouble later, keep them for Q4 (a scrimmage's 2nd half)
   fut.forEach((b,bi)=>{
     if(b.p!==lastP){av.forEach(p=>consec[p.id]=0);lastP=b.p}   // the quarter break is a rest
     const nb=fut[bi+1],lockNext=nb&&isLock(nb)&&nb.p===b.p?nb:null;  // a closer who comes on now stays on through the lock
@@ -927,12 +945,12 @@ let noLean=0,noBar=0,inGuard=0;
 // with at most 2 changing at once, fairness needs the extra one-player changes: allow at least 2 mini subs a quarter
 const miniSubsMax=()=>(+S.config.maxSubs===2)?Math.max(2,S.config.miniSubs|0):(S.config.miniSubs|0);
 function chooseHalves(T){
-  const max=miniSubsMax(),now=elapsedAbs(),old=S.halves||{};
+  const max=miniSubsMax()*(scrim()?2:1),now=elapsedAbs(),old=S.halves||{};   // the limit is per quarter: a scrimmage half is two
   const BB=baseBlocks(),halves={};
   BB.forEach(b=>{if(old[b.key]&&(b.abs0<=now||S.fixed[b.key]||S.applied[b.key]))halves[b.key]=1});   // splits that have started (or been swapped into) stay
   if(!max||S.config.shiftLength<3)return halves;
   let curErr=solvePlan(halves,T).err;
-  for(let q=1;q<=4;q++){
+  for(let q=1;q<=NREG();q++){
     const inQ=BB.filter(b=>b.p===q);
     let used=inQ.filter(b=>halves[b.key]).length;
     const cands=inQ.filter(b=>!inLockBlock(b)&&b.dur>=180&&((b.abs0>now&&!S.fixed[b.key]&&!S.applied[b.key])||(S.early&&S.early[b.key]&&b.abs0+b.dur/2>now+30)));   // a block whose lineup came from an early swap can still get its mini sub
@@ -1212,14 +1230,14 @@ function scoreMinus(side){
 }
 const toWindow=p=>p<=2?'h1':p<=4?'h2':'ot'+p;
 const toAllowed=p=>p<=2?2:p<=4?3:1;
-function toLeft(side){const w=toWindow(S.period);return toAllowed(S.period)-S.tos.filter(t=>t.side===side&&toWindow(t.p)===w).length}
-function toLeftLast2(side){if(S.period!==4||S.clockSeconds>120)return null;return 2-S.tos.filter(t=>t.side===side&&t.p===4&&t.c<=120).length}
+function toLeft(side){if(scrim())return 99;const w=toWindow(S.period);return toAllowed(S.period)-S.tos.filter(t=>t.side===side&&toWindow(t.p)===w).length}
+function toLeftLast2(side){if(scrim()||S.period!==4||S.clockSeconds>120)return null;return 2-S.tos.filter(t=>t.side===side&&t.p===4&&t.c<=120).length}
 function callTimeout(side){
   if(toLeft(side)<=0){toast('No timeouts left this '+(S.period<=4?'half':'period'));return}
   if(toLeftLast2(side)===0){toast('Max 2 timeouts in the last 2:00 of Q4');return}
   if(S.clockRunning){tick();S.clockRunning=false;S.pausedAt=Date.now()}
   S.tos.push({side,p:S.period,c:Math.round(S.clockSeconds),t:Math.round(elapsedAbs()),n:S.seqN=(S.seqN||0)+1});S.undo.push({type:'timeout',side});
-  log(clockLabel()+' — TIMEOUT '+(side==='us'?tn():oppName())+' ('+toLeft(side)+' left this '+(S.period<=4?'half':'period')+')');
+  log(clockLabel()+' — TIMEOUT '+(side==='us'?tn():oppName())+(scrim()?'':' ('+toLeft(side)+' left this '+(S.period<=4?'half':'period')+')'));
   ui.sheet=side==='us'?'ourto':null;save();render();
 }
 // Session 7 rule: they score on 3 straight possessions (≈ 6–0 run) → timeout at the next dead ball
@@ -1367,7 +1385,7 @@ function rotationCard(){
   t+='\n------------------------------------\nPlanned minutes:\n';
   const planned=id=>{let x=played(id);B.forEach(b=>{if(b.abs1<=now)return;if((S.plan[b.key]||[]).includes(id))x+=b.abs0>=now?b.dur:b.abs1-now});return x/60};
   availList().slice().sort((a,b)=>(a.num??999)-(b.num??999)).forEach(p=>{t+='• '+shortName(p)+' '+mt(planned(p.id))+' min\n'});   // shirt-number order, no tiers: the card gets passed round the bench
-  t+='\nTimeouts: 2 first half, 3 second half (max 2 in last 2:00), 1 per OT.';
+  t+=scrim()?'\nScrimmage: '+S.match.scrim+'-min halves, no timeout limits.':'\nTimeouts: 2 first half, 3 second half (max 2 in last 2:00), 1 per OT.';
   return t;
 }
 
@@ -1396,7 +1414,7 @@ function removePlayer(id){
   replan();save();render();toast('#'+(p.num??'?')+' '+p.name+' removed from the squad');
 }
 function undoFoul(id){const u=S.undo[S.undo.length-1];if(u&&u.type==='foul'&&u.id===id&&u.delta>0)undo();else addFoul(id,-1);toast('Foul removed — '+tag(id)+' now F:'+st(id).fouls)}
-const tfKey=()=>Math.min(S.period,4);   // FIBA: overtime fouls count with Q4
+const tfKey=()=>Math.min(S.period,NREG());   // FIBA: overtime fouls count with Q4 (a scrimmage counts them per half)
 const tfUs=()=>S.tf[tfKey()]||0,tfThem=()=>S.tfThem[tfKey()]||0;
 function addTeamFoulThem(d){const k=tfKey(),was=S.tfThem[k]||0;S.tfThem[k]=Math.max(0,was+d);if(S.tfThem[k]===was)return;S.undo.push({type:'tfthem',k,d:S.tfThem[k]-was});log(clockLabel()+' — '+oppName()+' team fouls '+S.tfThem[k]);save();render();
   const n=S.tfThem[k];toast(oppName()+' team fouls '+n+(d<0?'':n===4?' · next one = our free throws':n>=5?' · in the penalty, attack the rim':''))}
@@ -1559,7 +1577,7 @@ function startNextPeriod(){
 }
 function addOT(m){S.periods.push(m*60);log('Overtime added: '+m+' min');S.period++;S.clockSeconds=len();S.clockRunning=false;ui.sheet=null;replan();save();render()}
 function endPeriodEarly(){if(S.clockRunning)tick();S.clockRunning=false;log(qLabel(S.period)+' ended at '+mmss(S.clockSeconds)+' (manual)');S.clockSeconds=0;if(pOn())replan();save();openBreak();render()}
-function fullTime(){S.finished=true;S.clockRunning=false;releaseWake();log('FULL TIME'+(scoreLine()?' — '+scoreLine():'')+(S.match.practice?' (practice — not saved to the season)':''));if(!S.match.practice)archiveGame();ui.sheet=null;ui.tab='logs';save();render()}
+function fullTime(){S.finished=true;S.clockRunning=false;releaseWake();log('FULL TIME'+(scoreLine()?' — '+scoreLine():'')+(S.match.practice?' ('+(scrim()?'scrimmage':'practice')+' — not saved to the season)':''));if(!S.match.practice)archiveGame();ui.sheet=null;ui.tab='logs';save();render()}
 
 /* ---------- export ---------- */
 function exportRows(){
@@ -1567,7 +1585,7 @@ function exportRows(){
   return S.roster.filter(p=>p.active||played(p.id)>0).map(p=>({p,T:T[p.id]||0,a:played(p.id)/60,s:st(p.id)}))
     .sort((x,y)=>x.p.tier-y.p.tier||y.a-x.a);
 }
-const regMins=()=>sum(S.periods.slice(0,4))/60;
+const regMins=()=>sum(S.periods.slice(0,NREG()))/60;
 function leagueCheck(){
   const mins=S.roster.map(p=>played(p.id)/60).filter(m=>m>0).sort((a,b)=>b-a);
   if(mins.length<5)return null;
@@ -1577,9 +1595,9 @@ function leagueCheck(){
 // full=false (the default) is the parents' version: no tiers, no target minutes, players in shirt-number order,
 // so nobody can read a ranking off it. The coaches' version (full=true) has tiers and targets.
 function waText(full){
-  const n=S.periods.length-4;
-  let t='🏀 '+tfull().toUpperCase()+' — MINUTES & SUBS LOG'+(S.match.practice?' (PRACTICE)':'')+'\n📅 '+S.match.date+(S.match.opp?' | vs '+S.match.opp:'')+' | ⏱ '+mt(regMins())+' min regulation'+(n>0?' + '+n+' OT':'')+'\n';
-  if(scoreLine())t+='🏆 '+scoreLine()+' · by quarter '+scoreByQ().map(q=>q.us+'–'+q.them).join(', ')+'\n';
+  const n=S.periods.length-NREG();
+  let t='🏀 '+tfull().toUpperCase()+' — MINUTES & SUBS LOG'+(S.match.practice?scrim()?' (SCRIMMAGE)':' (PRACTICE)':'')+'\n📅 '+S.match.date+(S.match.opp?' | vs '+S.match.opp:'')+' | ⏱ '+mt(regMins())+' min regulation'+(n>0?' + '+n+' OT':'')+'\n';
+  if(scoreLine())t+='🏆 '+scoreLine()+' · by '+perWord()+' '+scoreByQ().map(q=>q.us+'–'+q.them).join(', ')+'\n';
   {const PB=pointsBy(),ks=Object.keys(PB).sort((a,b)=>PB[b]-PB[a]);if(ks.length){const un=S.score.ev.filter(e=>e.side==='us'&&!e.by).reduce((t,e)=>t+e.pts,0);t+='🏀 Scoring: '+ks.map(id=>shortName(P(id)).replace(/^#\d+ /,'')+' '+PB[id]).join(', ')+(un?' (+'+un+' not logged)':'')+'\n'}}
   if(S.tos.length)t+='⏱ Timeouts: '+tn()+' '+S.tos.filter(x=>x.side==='us').length+', '+oppName()+' '+S.tos.filter(x=>x.side==='them').length+'\n';
   t+='------------------------------------\n';
@@ -1589,11 +1607,11 @@ function waText(full){
   });
   if(S.config.passerelle&&regMins()){const p1=S.roster.filter(p=>pIn(p.id,1)),p2=S.roster.filter(p=>pIn(p.id,2)),both=p1.filter(p=>pIn(p.id,2));if(p1.length||p2.length)t+='🔁 Passerelle: Q1 '+p1.map(p=>'#'+(p.num??'?')).join(' ')+' · Q2 '+p2.map(p=>'#'+(p.num??'?')).join(' ')+(both.length?' · ⚠ played both: '+both.map(p=>'#'+(p.num??'?')).join(' '):'')+'\n'}
   {const np=S.roster.filter(p=>p.np&&!p.active&&played(p.id)===0);if(np.length)t+='🪑 Not picked: '+np.map(p=>'#'+(p.num??'?')+' '+p.name).join(', ')+'\n'}
-  const tfq=S.periods.slice(0,4).map((_,i)=>S.tf[i+1]||0);if(tfq.some(x=>x))t+='🟨 Team fouls by quarter: '+tfq.join('/')+(S.periods.length>4?' (OT counts with Q4)':'')+'\n';
+  const tfq=S.periods.slice(0,NREG()).map((_,i)=>S.tf[i+1]||0);if(tfq.some(x=>x))t+='🟨 Team fouls by '+perWord()+': '+tfq.join('/')+(S.periods.length>NREG()?' (OT counts with Q4)':'')+'\n';
   return t+'------------------------------------\nLogged via '+APP_NAME;
 }
 function csvText(){
-  const per=S.periods.map((_,i)=>i<4?'P'+(i+1):'OT'+(i-3));
+  const per=S.periods.map((_,i)=>i<NREG()?(scrim()?'H':'P')+(i+1):'OT'+(i-NREG()+1));
   const PM=plusMinus().pm,PB=pointsBy();let t='Jersey,Name,Tier,Target_Mins,Actual_Mins,Delta_Mins,'+per.join(',')+',Fouls,FouledOut,PlusMinus,Points\n';
   exportRows().forEach(r=>{t+=[r.p.num,'"'+r.p.name.replace(/"/g,'""')+'"',r.p.tier,m1(r.T),m1(r.a),m1(r.a-r.T),...S.periods.map((_,i)=>m1((r.s.periodSplit[i]||0)/60)),r.s.fouls,r.s.fouledOut?'Y':'N',PM[r.p.id]||0,PB[r.p.id]||0].join(',')+'\n'});
   if(S.score.ev.length){const Q=qRows(S.periods.length);t+='\nQuarter,Us,Them,Margin\n'+Q.map(r=>[r.l,r.us,r.them,r.m].join(',')).join('\n')+'\nTotal,'+S.score.us+','+S.score.them+','+(S.score.us-S.score.them)+'\n'}   // the import reads player rows only
@@ -1622,7 +1640,7 @@ function render(){
   m.innerHTML=ui.tab==='live'?viewLive():ui.tab==='plan'?viewPlan():ui.tab==='setup'?viewSetup():viewLogs();
   $('#dock').innerHTML=ui.tab==='live'&&!ui.glance?`<div class="dock"><div class="in">
     <button class="btn undob" data-act="undo" ${S.undo.length?'':'disabled'}>↩ Undo${S.undo.length?`<span class="ul">${esc(undoLabel())}</span>`:''}</button>
-    <button class="btn" data-act="break" ${S.finished?'disabled':''}>Quarter break ⏩</button></div></div>`:'';
+    <button class="btn" data-act="break" ${S.finished?'disabled':''}>${scrim()?'Half-time / full time ⏩':'Quarter break ⏩'}</button></div></div>`:'';
   renderSheet();
   if(ui.tab==='logs'){prepareTrace();renderTraceBox()}
 }
@@ -1664,7 +1682,7 @@ function card(p,T,on,ctx){
 const asking=n=>ui.askDone&&!S.clockRunning&&!S.table&&n&&n.b.key===ui.askDone.key;   // the whistle question is up
 function viewGlance(){
   const n=nextPlanned(),LC=liveCalls(),running=S.clockRunning,fd=foulDanger(),a=alertState();
-  const st0=S.finished?'Full time':running?'● Running — tap to pause':!S.started?'Tap to tip off':S.clockSeconds<=0?'Quarter over — tap for the break':'❚❚ Paused — tap to run';
+  const st0=S.finished?'Full time':running?'● Running — tap to pause':!S.started?'Tap to tip off':S.clockSeconds<=0?(scrim()?'Half':'Quarter')+' over — tap for the break':'❚❚ Paused — tap to run';
   let next='';
   if(S.started&&!S.finished){
     if(!n||!n.ins.length)next='<div class="gnext"><div class="gh muted">No more planned changes</div></div>';
@@ -1691,7 +1709,7 @@ function viewGlance(){
       ${scorerStrip()}
       ${(()=>{const c=captOf();return c&&availList().includes(c)&&!S.onCourtIds.includes(c.id)?`<div class="muted small">Captain ${esc(shortName(c))} is on the bench: name a floor captain.</div>`:''})()}
       <div class="gfl"><span class="muted small">Foul on</span>${S.onCourtIds.map(id=>{const f=st(id).fouls;return `<button class="btn gf ${f>=4?'bad':f>=3?'warn':''}" data-act="foul:${id}" data-lp="foulm:${id}"><b>#${P(id).num??'?'}</b><em>${esc(String(P(id).name).split(/\s+/).slice(-1)[0])}</em><span>F${f}</span></button>`}).join('')}<button class="btn gf" data-act="tft:1" data-lp="tfm:1" aria-label="${esc(oppName())} foul, hold to take one off">Their foul<span>TF ${tfThem()}</span></button></div>
-      <div class="gtools"><button class="btn" data-act="sheet:to">⏱ Timeout<span>${toLeft('us')} left</span></button><button class="btn" data-act="resync">⚙ Resync<span>clock</span></button><button class="btn" data-act="break">⏩ Break<span>end quarter</span></button></div>
+      <div class="gtools"><button class="btn" data-act="sheet:to">⏱ Timeout<span>${scrim()?'no limit':toLeft('us')+' left'}</span></button><button class="btn" data-act="resync">⚙ Resync<span>clock</span></button><button class="btn" data-act="break">⏩ Break<span>end ${perWord()}</span></button></div>
       <button class="btn gundo" data-act="undo" ${S.undo.length?'':'disabled'}>↩ Undo${S.undo.length?' '+esc(undoLabel()):''}</button></div>`:''}
     ${S.started&&!S.finished?'':'<button class="btn ghost gexit" data-act="glance:0">Back to the full screen</button>'}</div>`;
 }
@@ -1722,7 +1740,7 @@ function viewLive(){
   let planBox='';
   if(S.started&&!S.finished&&(!lock||LC.closersIn||LC.later||(LC.n&&LC.n.fill))){
     if(!n)planBox='<div class="plannext"><div class="ph muted">No more planned changes</div></div>';
-    else if(LC.later)planBox=`<div class="plannext"><div class="ph muted">No more changes this quarter — the next one is at the start of ${qLabel(n.b.p)}.</div></div>`;
+    else if(LC.later)planBox=`<div class="plannext"><div class="ph muted">No more changes this ${perWord()} — the next one is at the start of ${qLabel(n.b.p)}.</div></div>`;
     else{
     const at=blockLabel(n.b).split('–')[0];
     const W=+S.config.onTimeSecs||0,kind=n.b.half===2?'Mini sub':'Change',names=n.ins.map(who).join(', ');
@@ -1740,23 +1758,23 @@ function viewLive(){
   if(S.table&&S.started&&!S.finished)planBox=`<div class="plannext st-table"><div class="ph"><b>At the table</b> · they go on when you pause the clock for the whistle</div>
       <div class="swaps">${swapRows(S.table)}</div>
       <div class="pbtns"><button class="btn pri" data-act="tablego">✓ They’re on now</button><button class="btn" data-act="tablecancel">Cancel</button></div></div>`;
-  const hdr=`<div class="status"><span class="per">${qLabel(S.period)}${S.period<=4?' · '+(S.period<=2?'1st':'2nd')+' half':''}</span>
+  const hdr=`<div class="status"><span class="per">${qLabel(S.period)}${S.period<=4&&!scrim()?' · '+(S.period<=2?'1st':'2nd')+' half':''}</span>
     ${strongOn<floor&&on.length?`<span class="chip warn">⚠️ Low core &lt;${floor}</span>`:''}
     ${t1F&&t1On<t1F&&on.length===5&&S.started?`<span class="chip warn">⚠️ ${t1On} T1 on</span>`:''}
     ${bhFloorEff()&&on.length===5&&S.started&&!S.finished&&on.filter(isBHp).length<bhFloorEff()?`<span class="chip warn">⚠️ No ball-handler on</span>`:''}
     ${on.length<5&&S.started&&!S.finished?`<span class="chip bad">${on.length} on court</span>`:''}
-    ${S.match.practice?'<span class="chip acc">Practice</span>':''}
+    ${S.match.practice?`<span class="chip acc">${scrim()?'Scrimmage':'Practice'}</span>`:''}
     ${S.started&&!S.finished?(ui.awake!=='none'?'<span class="chip go" title="Screen kept on">☀ Screen on</span>':'<button class="chip warn" data-act="sheet:awake">⚠ Screen may sleep</button>'):''}
-    ${S.started||tfUs()?`<span class="chip ${tfUs()>=5?'bad':tfUs()===4?'warn':''}" title="Team fouls this quarter">${tfUs()>=5?'Team fouls '+tfUs()+' · every foul = free throws':tfUs()===4?'Team fouls 4 · next one = free throws':'Team fouls '+tfUs()}</span>`:''}
+    ${S.started||tfUs()?`<span class="chip ${tfUs()>=5?'bad':tfUs()===4?'warn':''}" title="Team fouls this ${perWord()}">${tfUs()>=5?'Team fouls '+tfUs()+' · every foul = free throws':tfUs()===4?'Team fouls 4 · next one = free throws':'Team fouls '+tfUs()}</span>`:''}
     ${tfThem()?`<button class="chip ${tfThem()>=5?'go':tfThem()===4?'acc':''}" data-act="sheet:score">${tfThem()>=5?esc(oppName())+' in the penalty ('+tfThem()+') · attack the rim':esc(oppName())+' team fouls '+tfThem()}</button>`:''}
     <span class="sp"></span><span class="muted small">Pool ${mt(5*tot/60)} min</span></div>`;
   const run=S.started&&!S.finished?runAgainst():null,tl=toLeft('us'),l2=toLeftLast2('us');
   const scoreBar=`<div class="scorebar">
     <button class="sb" data-act="sheet:score" aria-label="Score"><span class="tm">${esc(tn())}</span><b>${S.score.us}</b><span class="dash">–</span><b>${S.score.them}</b><span class="tm">${esc(oppName())}</span></button>
     <button class="btn tobtn" data-act="tft:1" data-lp="tfm:1" ${S.started&&!S.finished?'':'disabled'} aria-label="${esc(oppName())} foul, hold to take one off">Their foul <span class="muted small">TF ${tfThem()} · hold −1</span></button>
-    <button class="btn tobtn" data-act="sheet:to" ${S.started&&!S.finished?'':'disabled'}>⏱ Timeout <span class="muted small">${tl} left${l2!=null?' · '+Math.min(tl,l2)+' in last 2:00':''}</span></button></div>`;
+    <button class="btn tobtn" data-act="sheet:to" ${S.started&&!S.finished?'':'disabled'}>⏱ Timeout <span class="muted small">${scrim()?'no limit':tl+' left'}${l2!=null?' · '+Math.min(tl,l2)+' in last 2:00':''}</span></button></div>`;
   return hdr+scoreBar+scorerStrip()+`
-  ${ui.nudge===S.period&&!S.clockRunning&&!S.finished&&S.clockSeconds>=len()-0.5?`<div class="banner pause">⏱ The clock hasn't started this ${S.started?'quarter':'game'}, but you're logging scores or fouls. Start it now, then Resync to the table clock. <button class="btn sm" data-act="clock">▶ Start clock</button> <button class="btn sm ghost" data-act="resync">Resync</button></div>`:''}
+  ${ui.nudge===S.period&&!S.clockRunning&&!S.finished&&S.clockSeconds>=len()-0.5?`<div class="banner pause">⏱ The clock hasn't started this ${S.started?perWord():'game'}, but you're logging scores or fouls. Start it now, then Resync to the table clock. <button class="btn sm" data-act="clock">▶ Start clock</button> <button class="btn sm ghost" data-act="resync">Resync</button></div>`:''}
   ${run?`<div class="banner bad">${esc(oppName())} on a ${run.pts}–0 run (${run.n} straight scores). Timeout at the next dead ball? <button class="btn sm" data-act="to:us" ${tl>0?'':'disabled'}>Call timeout</button></div>`:''}
   <button class="clock ${running?'run':'stop'}" data-act="clock" data-lp="resync" aria-label="Game clock">
     <div class="digits">${mmss(S.clockSeconds)}</div><div class="state">${stateTxt}</div></button>
@@ -1801,7 +1819,7 @@ function halfTimeCard(){
   const T=targets(),av=availList();
   const short=av.map(p=>({p,t:trackOf(p.id,T[p.id]||0)})).filter(x=>x.t.cls==='short'||x.t.cls==='way').sort((a,b)=>a.t.d-b.t.d);
   // a bigger 2nd half than 1st is worth a word (T1s on their usual load aren't news); both cut-offs scale with quarter length
-  const half2=sum(S.periods.slice(2,4))/60,ql=(S.periods[2]||0)/60;
+  const H=NREG()/2,half2=sum(S.periods.slice(H,NREG()))/60,ql=(S.periods[H]||0)/60/(scrim()?2:1);   // ql: a quarter's length (half a scrimmage half)
   const toCome=av.map(p=>{const so=played(p.id)/60;return {p,so,m:projMins(p.id)-so}}).filter(x=>x.m>=ql/2&&x.m-x.so>=half2/6).sort((a,b)=>(b.m-b.so)-(a.m-a.so)).slice(0,4);
   const fouls=S.roster.filter(p=>st(p.id).fouls>=2).sort((a,b)=>st(b.id).fouls-st(a.id).fouls);
   const {pm,counted}=plusMinus(),best=counted?av.filter(p=>played(p.id)>0).sort((a,b)=>(pm[b.id]||0)-(pm[a.id]||0)).slice(0,3):[];
@@ -1810,7 +1828,7 @@ function halfTimeCard(){
   const PG=pGroups(),no=PG?pIds(PG,0):[];
   return `<div class="htc">
     ${S.match.note?`<div class="htr"><b>Game plan:</b> ${esc(S.match.note)}</div>`:''}
-    ${S.score.ev.length?`<div class="htr"><b>Points by quarter</b>${qTable(qRows(2),'1st half')}</div>`:''}
+    ${S.score.ev.length?`<div class="htr"><b>Points by quarter</b>${qTable(qRows(NREG()/2),'1st half')}</div>`:''}
     ${PG?`<div class="htr"><b>Passerelle:</b> ${no.length?`<span class="trk way">${no.map(id=>nm(P(id))).join(', ')} didn’t play the 1st half, so can’t play the 2nd</span>`:'<span class="trk ok">everyone played the 1st half, so anyone can play the 2nd</span>'}</div>`:''}
     <div class="htr"><b>Minutes:</b> ${short.length?short.map(x=>`<span class="trk ${x.t.cls}">${nm(x.p)} will finish ${m1(-x.t.d)} short</span>`).join(' · '):'<span class="trk ok">the plan finishes everyone within a minute of target</span>'}${toCome.length?`<br><span class="muted small">Bigger 2nd half for: ${toCome.map(x=>nm(x.p)+' '+m1(x.m)+' of the '+m1(half2)+' min left ('+m1(x.so)+' so far)').join(' · ')} — worth telling them now.</span>`:''}</div>
     <div class="htr"><b>Fouls:</b> ${fouls.length?fouls.map(p=>`<span class="${st(p.id).fouls>=3?'trk way':'trk short'}">${nm(p)} F${st(p.id).fouls}</span>`).join(' · ')+(fouls.some(p=>st(p.id).fouls>=3)?' <span class="muted small">— 3 by half-time: be careful</span>':''):'<span class="muted">nobody on 2+</span>'} · team fouls reset now</div>
@@ -1822,10 +1840,10 @@ function rotationSheet(){
   const T=targets(),B=blocksAll(),PG=pGroups(),rows=S.roster.filter(p=>p.active&&!st(p.id).fouledOut).sort((a,b)=>a.tier-b.tier||a.num-b.num);
   const head='<th>#</th><th>Player</th><th>T</th>'+B.map(b=>`<th class="${b.s===0&&!b.half?'q':''}">${b.half===2?'↳':''}${qLabel(b.p)}<br>${mmssShort(S.periods[b.p-1]-b.s)}${inLockBlock(b)?' 🔒':''}</th>`).join('')+'<th>Target</th><th>Fouls</th>';
   const body=rows.map(p=>`<tr><td><b>${p.num}</b></td><td class="n">${esc(p.name)}${esc(captTag(p))}${p.bh?' (BH)':''}${S.closersIds.includes(p.id)?' ©':''}${PG?' · '+({1:'Q1',2:'Q2',0:'no 2nd half'})[PG.g[p.id]]:''}</td><td>${p.tier}</td>`+B.map(b=>{const on=(S.plan[b.key]||[]).includes(p.id);return `<td class="${on?'on':''} ${b.s===0&&!b.half?'q':''}">${on?'●':''}</td>`}).join('')+`<td>${m1(T[p.id]||0)}</td><td class="boxes">☐☐☐☐☐</td></tr>`).join('');
-  const q=S.periods.slice(0,4).map((_,i)=>`<tr><td>Q${i+1}</td><td class="boxes">☐☐☐☐ ☐</td><td class="boxes">☐☐☐☐ ☐</td></tr>`).join('');
+  const q=S.periods.slice(0,NREG()).map((_,i)=>`<tr><td>${qLabel(i+1)}</td><td class="boxes">☐☐☐☐ ☐</td><td class="boxes">☐☐☐☐ ☐</td></tr>`).join('');
   return `<div class="pbar"><button data-act="printgo">🖨 Print</button><button class="g" data-act="printclose">Close</button></div>
   <h1>${esc(tfull())}${S.match.opp?' vs '+esc(S.match.opp):''}</h1>
-  <p class="ps">${esc(S.match.date)} · ${S.config.quarterMins}-minute quarters · ${S.config.shiftLength}-minute blocks · ● = on court · © = closer · BH = ball-handler${PG?' · Passerelle: Q1/Q2 = the quarter they play in the 1st half':''} · printed ${esc(clockLabel())}</p>
+  <p class="ps">${esc(S.match.date)} · ${scrim()?S.match.scrim+'-minute halves (scrimmage)':S.config.quarterMins+'-minute quarters'} · ${S.config.shiftLength}-minute blocks · ● = on court · © = closer · BH = ball-handler${PG?' · Passerelle: Q1/Q2 = the quarter they play in the 1st half':''} · printed ${esc(clockLabel())}</p>
   <table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>
   <div class="pgrid"><div><b>Team fouls</b> (5th = their free throws) and <b>timeouts</b>
     <table><thead><tr><th></th><th>${esc(tn())} fouls</th><th>${esc(oppName())} fouls</th></tr></thead><tbody>${q}</tbody></table>
@@ -1850,7 +1868,7 @@ function viewPlan(){
   const core='<tr><td class="muted">Core (T1+T2)</td>'+B.map(b=>{const c=(S.plan[b.key]||[]).filter(id=>tierOf(id)<=2).length;return `<td class="${cls(b)} ${c<S.config.strongFloor?'lowcore':'muted'}">${c}</td>`}).join('')+'<td></td><td></td><td></td></tr>';
   return `<h2>Rotation plan</h2>${coreWarn()?`<div class="banner pause fdb"><span>⚠ ${esc(coreWarn())}</span><div class="pbtns"><button class="btn sm" data-act="cfg:strongFloor:${coreShort(baseTargets()).floor-1}">Set core floor to ${coreShort(baseTargets()).floor-1}</button></div></div>`:''}
   <div class="legend"><span>↳ = mini sub (one change mid-block)</span><span><i style="background:var(--t1)"></i>T1 Core</span><span><i style="background:var(--t2)"></i>T2 Rotation</span><span><i style="background:var(--t3)"></i>T3 Development</span><span><i style="background:var(--t4)"></i>T4 Emerging</span><span>🔒 Closers block</span><span>📌 Lineup you locked</span><span>* Change time moved</span></div>
-  ${focusLean()?`<p class="note" style="margin-top:0"><b>Quarter focus ${esc(focusText())}</b>${S.focusDropped?': no room in this game without costing minutes, so the plan is as normal.':` · T1/T2 on court: ${coreByQ()}.`} <button class="btn sm ghost" data-act="sheet:focus">Change</button></p>`:S.finished?'':`<p class="note" style="margin-top:0"><button class="btn sm" data-act="sheet:focus">◎ Quarter focus</button> Give the strongest line-ups to the quarters you pick, e.g. Q3 + Q4. Nobody’s minutes change.</p>`}<p class="note" style="margin-top:0">${S.finished?'':`<button class="btn sm" data-act="swap">⇄ Swap court time</button> Tap a player’s name to swap their slots with a teammate in the same tier. `}Tap a block's time to lock its lineup or move the change earlier or later.${PG?` <b>Passerelle:</b> Q1 group ${PG.n1}, Q2 group ${PG.n2} (change them on the <button class="btn sm ghost" data-act="sheet:gameday">Game-day sheet</button>).`:''}</p>${pShort()?`<p class="note" style="color:var(--warn)">⚠ ${esc(pShort())}</p>`:''}
+  ${focusLean()?`<p class="note" style="margin-top:0"><b>Quarter focus ${esc(focusText())}</b>${S.focusDropped?': no room in this game without costing minutes, so the plan is as normal.':` · T1/T2 on court: ${coreByQ()}.`} <button class="btn sm ghost" data-act="sheet:focus">Change</button></p>`:S.finished||scrim()?'':`<p class="note" style="margin-top:0"><button class="btn sm" data-act="sheet:focus">◎ Quarter focus</button> Give the strongest line-ups to the quarters you pick, e.g. Q3 + Q4. Nobody’s minutes change.</p>`}<p class="note" style="margin-top:0">${S.finished?'':`<button class="btn sm" data-act="swap">⇄ Swap court time</button> Tap a player’s name to swap their slots with a teammate in the same tier. `}Tap a block's time to lock its lineup or move the change earlier or later.${PG?` <b>Passerelle:</b> Q1 group ${PG.n1}, Q2 group ${PG.n2} (change them on the <button class="btn sm ghost" data-act="sheet:gameday">Game-day sheet</button>).`:''}</p>${pShort()?`<p class="note" style="color:var(--warn)">⚠ ${esc(pShort())}</p>`:''}
   <div class="tbl"><table class="pg"><thead><tr>${head}</tr></thead><tbody>${body}${t1row}${bhrow}${core}</tbody></table></div>
   <h2>Rotation card</h2>
   <p class="note" style="margin-top:0">The plan as plain text for an assistant or the bench. Copy it into WhatsApp before the game; it updates as the plan changes.</p>
@@ -1987,7 +2005,7 @@ function pmSection(){
 }
 function viewLogs(){
   const L=S.subLogs.slice().reverse().map(l=>`<div class="${l.kind==='rp'?'rp':''}"><span class="t">${l.time}</span>${esc(l.text)}</div>`).join('')||'<div class="muted">No events yet.</div>';
-  return `${S.finished&&S.match.practice?'<div class="banner lock">Practice match — not saved to the season. <button class="btn sm" data-act="archive">Save it anyway</button></div>':''}${S.score.ev.length?'<h2>Points by quarter</h2>'+qTable(qRows()):''}${pmSection()}<h2>Sub log</h2><div class="log">${L}</div>
+  return `${S.finished&&S.match.practice?`<div class="banner lock">${scrim()?'Scrimmage':'Practice match'} — not saved to the season.${scrim()?'':' <button class="btn sm" data-act="archive">Save it anyway</button>'}</div>`:''}${S.score.ev.length?'<h2>Points by quarter</h2>'+qTable(qRows()):''}${pmSection()}<h2>Sub log</h2><div class="log">${L}</div>
   ${(()=>{const t=seasonTable();
     const head=`<div class="hline"><h2>Season</h2>${S.started&&!S.archived&&!S.match.practice?'<button class="btn sm" data-act="archive">Save this game</button>':''}<button class="btn sm ghost" data-act="sheet:import">+ Past game</button>${t?'<button class="btn sm ghost" data-act="sheet:season">Manage</button>':''}</div>`;
     if(!t)return head+'<div style="margin-top:8px"><button class="btn ghost" data-act="sheet:restore">Restore from a backup</button></div><p class="note">Games are saved here at full time, so you can see minutes across the season. Add earlier games from their CSV or WhatsApp summary.</p>';
@@ -2050,10 +2068,10 @@ function renderSheet(){
     if(early){h=`<h2>End ${qLabel(S.period)} now?</h2><p class="muted">The app clock still shows ${mmss(S.clockSeconds)}. Use this if the table clock has hit zero.</p>
       <div class="stack"><button class="btn pri" data-act="endnow">End ${qLabel(S.period)}</button><button class="btn ghost" data-act="close">Keep playing</button></div>`}
     else if(!last){
-      h=`<h2>${qLabel(S.period)} done</h2>${S.period===2?halfTimeCard():''}${scoreLine()?`<p><b>${esc(scoreLine())}</b> <span class="muted small">· ${qLabel(S.period)} ${scoreByQ()[S.period-1].us}–${scoreByQ()[S.period-1].them}</span> <button class="btn sm" data-act="sheet:score">Edit score</button></p>`:`<p><button class="btn sm" data-act="sheet:score">Log the score</button></p>`}${n&&n.ins.length&&n.b.p===S.period+1&&n.b.s===0?`<p>Plan for the start of ${qLabel(S.period+1)}:</p><div class="swaps">${swapRows(n)}</div>`:'<p class="muted">Plan keeps the same five.</p>'}${S.period<4?focusHtml('break'):''}
+      h=`<h2>${qLabel(S.period)} done</h2>${S.period===NREG()/2?halfTimeCard():''}${scoreLine()?`<p><b>${esc(scoreLine())}</b> <span class="muted small">· ${qLabel(S.period)} ${scoreByQ()[S.period-1].us}–${scoreByQ()[S.period-1].them}</span> <button class="btn sm" data-act="sheet:score">Edit score</button></p>`:`<p><button class="btn sm" data-act="sheet:score">Log the score</button></p>`}${n&&n.ins.length&&n.b.p===S.period+1&&n.b.s===0?`<p>Plan for the start of ${qLabel(S.period+1)}:</p><div class="swaps">${swapRows(n)}</div>`:'<p class="muted">Plan keeps the same five.</p>'}${S.period<4&&!scrim()?focusHtml('break'):''}
       <div class="stack" style="margin-top:10px">${n&&n.ins.length&&n.b.p===S.period+1&&n.b.s===0?'<button class="btn" data-act="qswap">Apply planned lineup ⚡</button>':''}<button class="btn pri" data-act="nextp">Ready for ${qLabel(S.period+1)}</button><button class="btn ghost" data-act="close">Close</button></div>`}
-    else h=`<h2>${qLabel(S.period)} done</h2><p class="muted">${scoreLine()?scoreLine()+'. ':''}Scores level? Add overtime. Otherwise call full time.</p>
-      <div class="stack"><button class="btn" data-act="ot:${S.config.otLengthMins}">+${S.config.otLengthMins} min overtime</button>
+    else h=`<h2>${qLabel(S.period)} done</h2><p class="muted">${scoreLine()?scoreLine()+'. ':''}${scrim()?'That’s the scrimmage.':'Scores level? Add overtime. Otherwise call full time.'}</p>
+      <div class="stack">${scrim()?'':`<button class="btn" data-act="ot:${S.config.otLengthMins}">+${S.config.otLengthMins} min overtime</button>`}
       <button class="btn pri" data-act="fulltime">Full time</button><button class="btn ghost" data-act="close">Close</button></div>`;
   }else if(ui.sheet==='score'){
     const ev=S.score.ev.slice(-4).reverse();
@@ -2062,14 +2080,14 @@ function renderSheet(){
     <div class="sccol"><h3>${esc(oppName())}</h3><button class="btn big" data-act="sc:them:2">+2</button><button class="btn big" data-act="sc:them:3">+3</button><button class="btn big" data-act="sc:them:1">+1</button><button class="btn" data-act="scm:them" ${S.score.them?'':'disabled'}>−1 correction</button></div></div>
     ${ev.length?`<p class="muted small">Last: ${ev.map(e=>(e.side==='us'?esc(tn()):esc(oppName()))+' +'+e.pts+' ('+qLabel(e.p)+' '+mmssShort(e.c)+')').join(' · ')}. Mistake? Undo takes the last one off, or −1 takes a point off.</p>`:'<p class="muted small">Optional. If you log scores, the app spots a run against you and the summary gets a quarter-by-quarter score.</p>'}
     ${scorerStrip()}
-    <h3>${esc(oppName())} team fouls this quarter: ${tfThem()}</h3><p class="muted small">From their 5th, every foul gives us free throws (FIBA). Ours count automatically: ${tfUs()}.</p>
+    <h3>${esc(oppName())} team fouls this ${perWord()}: ${tfThem()}</h3><p class="muted small">From their 5th, every foul gives us free throws (FIBA). Ours count automatically: ${tfUs()}.</p>
     <div class="grid2"><button class="btn" data-act="tft:1">${esc(oppName())} foul +1</button><button class="btn" data-act="tft:-1" ${tfThem()?'':'disabled'}>−1</button></div>
     <div class="grid2" style="margin-top:8px"><button class="btn" data-act="undo" ${S.undo.length&&['score','scorefix'].includes(S.undo[S.undo.length-1].type)?'':'disabled'}>↩ Undo last score</button><button class="btn pri" data-act="close">Done</button></div>`;
   }else if(ui.sheet==='to'){
     const a=toLeft('us'),b=toLeft('them'),l2=toLeftLast2('us');
-    h=`<h2>Timeout</h2><p class="muted">${S.period<=2?'First half: 2 each':S.period<=4?'Second half: 3 each, max 2 in the last 2:00':'Overtime: 1 each'}. The clock pauses.</p>
-    <div class="stack"><button class="btn pri" data-act="to:us" ${a>0&&l2!==0?'':'disabled'}>Our timeout · ${a} left${l2!=null?' ('+Math.min(a,l2)+' in last 2:00)':''}</button>
-    <button class="btn" data-act="to:them" ${b>0&&toLeftLast2('them')!==0?'':'disabled'}>${esc(oppName())} timeout · ${b} left</button>
+    h=`<h2>Timeout</h2><p class="muted">${scrim()?'Scrimmage: no limit':S.period<=2?'First half: 2 each':S.period<=4?'Second half: 3 each, max 2 in the last 2:00':'Overtime: 1 each'}. The clock pauses.</p>
+    <div class="stack"><button class="btn pri" data-act="to:us" ${a>0&&l2!==0?'':'disabled'}>Our timeout${scrim()?'':' · '+a+' left'}${l2!=null?' ('+Math.min(a,l2)+' in last 2:00)':''}</button>
+    <button class="btn" data-act="to:them" ${b>0&&toLeftLast2('them')!==0?'':'disabled'}>${esc(oppName())} timeout${scrim()?'':' · '+b+' left'}</button>
     <button class="btn ghost" data-act="close">Cancel</button></div>`;
   }else if(ui.sheet==='ourto'){
     const n=timeoutChange();
@@ -2185,15 +2203,16 @@ function renderSheet(){
     <div class="grid2"><input class="inp" type="text" data-chg="opp" value="${esc(S.match.opp)}" placeholder="Opponent"><input class="inp" type="text" data-chg="date" value="${esc(S.match.date)}"></div>
     <input class="inp" type="text" data-chg="note" maxlength="140" value="${esc(S.match.note||'')}" placeholder="Game plan (optional), e.g. Slow their #3 early" aria-label="Game plan note" style="width:100%;margin-top:8px">
     <p class="muted small" style="margin:4px 0 0">One line for you: shown on the glance screen and the half-time card. Not in the WhatsApp summary.</p>
-    <div class="seg" style="margin-top:8px"><button data-act="practice:0" aria-pressed="${!S.match.practice}">Game</button><button data-act="practice:1" aria-pressed="${!!S.match.practice}">Practice</button></div>
+    <div class="seg" style="margin-top:8px"><button data-act="practice:0" aria-pressed="${!S.match.practice}">Game</button><button data-act="practice:1" aria-pressed="${!!S.match.practice&&!scrim()}">Practice</button><button data-act="scrimlen:${S.match.scrim||15}" aria-pressed="${scrim()}" ${S.started&&!scrim()?'disabled':''}>Scrimmage</button></div>
     <p class="small" style="margin:10px 0 4px"><b>Who's here?</b> Tap to mark in or out · <b>S</b> = starter <span class="chip ${nS===5?'go':'warn'}">Starters ${nS}/5</span> <span class="chip ${over?'warn':'acc'}">${mx&&S.roster.length>mx?`${nA} of ${S.roster.length} picked${over?' · limit '+mx:''}`:nA+' here'}</span></p>
     ${noNum().length?`<p class="note" style="color:var(--warn)">⚠ ${esc(noNum().map(p=>p.name).join(', '))} need${noNum().length===1?'s':''} a shirt number before tip-off (Setup → Squad &amp; tiers).</p>`:''}
     ${over?`<p class="note">Only ${mx} can play (Setup → Squad). Mark ${nA-mx} as not picked. “Sat out” counts this season’s games each player wasn’t picked.</p>`:''}
     <div class="gdl">${rows.map(p=>`<div class="gdr ${p.active?'':'off'}"><button class="btn gdh" data-act="gdhere:${p.id}" aria-pressed="${p.active}">${p.active?'✓':'✕'} <b>#${p.num??'?'}</b> <s>${esc(p.name)}</s> <span class="tier t${p.tier}">T${p.tier}</span>${so[p.num]?`<span class="muted small gso">sat out ${so[p.num]}</span>`:''}</button>${p.active||S.started?`<button class="tog c" data-act="gdstart:${p.id}" aria-pressed="${!!p.starter&&p.active}" ${p.active?'':'disabled'}>S</button>`:`<button class="tog c gdwhy" data-act="gdnp:${p.id}" aria-label="${p.np?'Not picked, tap for not here':'Not here, tap for not picked'}">${p.np?'Not<br>picked':'Not<br>here'}</button>`}</div>`).join('')}</div>
     ${S.started?'<p class="note">The game has started: marking someone out now counts as an injury (their minutes so far are kept).</p>':''}
     <div class="field" style="margin-top:10px"><label for="captsel">Captain</label><select id="captsel" data-chg="capt"><option value="">None</option>${S.roster.slice().sort((a,b)=>(a.num??999)-(b.num??999)).map(p=>`<option value="${p.id}" ${p.capt?'selected':''}>#${p.num??'?'} ${esc(p.name)}</option>`).join('')}</select><span class="muted small">Shown as (Capt.) on the rotation sheet, the rotation card and the summary. The glance screen says when they’re on the bench, so you can name a floor captain.</span></div>
-    ${focusHtml()}
-    ${S.config.passerelle?pGroupsHtml():''}
+    ${scrimHtml()}
+    ${scrim()?'':focusHtml()}
+    ${S.config.passerelle&&!scrim()?pGroupsHtml():''}
     ${swapList().length?`<p class="small" style="margin:10px 0 4px"><b>Court-time swaps</b> (this game · make them on the Plan tab)</p><div class="stack">${swapList().map(w=>`<button class="btn ghost" data-act="swapclr:${w.k}">#${P(w.a).num??'?'} ⇄ #${P(w.b).num??'?'} · Undo</button>`).join('')}</div>`:''}
     <button class="btn pri" style="width:100%;margin-top:10px" data-act="close">Done${nS===5||S.started?'':' (pick 5 starters)'}${over?` · ${nA} picked, limit ${mx}`:''}</button>`;
   }else if(ui.sheet==='pbreach'){
@@ -2277,9 +2296,9 @@ function chgMoveHtml(){
     <div class="grid2" style="margin-top:8px"><input id="chgv" type="text" inputmode="numeric" placeholder="went on at mm:ss" style="min-height:48px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:0 12px"><button class="btn" data-act="chgset">Move</button></div>
     <p class="note">Between ${mmss(L.hi)}${(()=>{const C=chgList(),p=C.length>1?C[C.length-2].c:len();return L.hi>=p-0.5?' ('+(C.length>1?'the change before':'start of '+qLabel(S.period))+')':''})()} and ${mmss(L.lo)}${L.lo<=S.clockSeconds+0.5?' (now)':''}.</p>`}
 /* ---------- debug trace: every engine action + what the app believed afterwards ---------- */
-const APP_VERSION='2.25.0 · 2026-11-17';
+const APP_VERSION='2.26.0 · 2026-11-18';
 let dbgDepth=0;
-function dbgInit(){S.debug={app:APP_VERSION,created:new Date().toISOString(),start:{config:JSON.parse(JSON.stringify(S.config)),roster:JSON.parse(JSON.stringify(S.roster)),closersIds:S.closersIds.slice(),periods:S.periods.slice(),focus:S.match.focus||null},ev:[]}}
+function dbgInit(){S.debug={app:APP_VERSION,created:new Date().toISOString(),start:{config:JSON.parse(JSON.stringify(S.config)),roster:JSON.parse(JSON.stringify(S.roster)),closersIds:S.closersIds.slice(),periods:S.periods.slice(),focus:S.match.focus||null,scrim:S.match.scrim||0},ev:[]}}
 const ids2n=a=>(a||[]).map(id=>{const p=P(id);return p?p.num:id});
 function dbgSnap(){
   const n=nextPlanned(),lc=liveCalls(),T=targets(),now=elapsedAbs(),plan={},tg={},secs={},fouls={};
@@ -2308,7 +2327,7 @@ function traced(name,fn){return function(...args){
 doSub=traced('doSub',doSub);quickSwap=traced('quickSwap',quickSwap);skipPlanned=traced('skipPlanned',skipPlanned);
 addFoul=traced('addFoul',addFoul);undoFoul=traced('undoFoul',undoFoul);undo=traced('undo',undo);
 startClock=traced('startClock',startClock);pauseClock=traced('pauseClock',pauseClock);resync=traced('resync',resync);tableGo=traced('tableGo',tableGo);tableCancel=traced('tableCancel',tableCancel);moveChange=traced('moveChange',moveChange);
-swapSlots=traced('swapSlots',swapSlots);swapClear=traced('swapClear',swapClear);setActive=traced('setActive',setActive);setNotPicked=traced('setNotPicked',setNotPicked);setFocus=traced('setFocus',setFocus);setHot=traced('setHot',setHot);confirmHot=traced('confirmHot',confirmHot);setCold=traced('setCold',setCold);
+swapSlots=traced('swapSlots',swapSlots);swapClear=traced('swapClear',swapClear);setActive=traced('setActive',setActive);setNotPicked=traced('setNotPicked',setNotPicked);setFocus=traced('setFocus',setFocus);setScrim=traced('setScrim',setScrim);setHot=traced('setHot',setHot);confirmHot=traced('confirmHot',confirmHot);setCold=traced('setCold',setCold);
 startNextPeriod=traced('startNextPeriod',startNextPeriod);pinBlock=traced('pinBlock',pinBlock);addScore=traced('addScore',addScore);callTimeout=traced('callTimeout',callTimeout);importGame=traced('importGame',importGame);unpinBlock=traced('unpinBlock',unpinBlock);moveBoundary=traced('moveBoundary',moveBoundary);adjMins=traced('adjMins',adjMins);addTeamFoulThem=traced('addTeamFoulThem',addTeamFoulThem);scoreMinus=traced('scoreMinus',scoreMinus);setScorer=traced('setScorer',setScorer);addOT=traced('addOT',addOT);endPeriodEarly=traced('endPeriodEarly',endPeriodEarly);fullTime=traced('fullTime',fullTime);
 // Compact trace (pumas-debug-2): each event keeps only what changed since the one before, then the whole thing is
 // gzipped and base64'd so a full game fits a phone clipboard / chat paste. Long traces are split into parts.
@@ -2397,7 +2416,8 @@ function act(a,e){
     case 'sc':addScore(id,+v);if(ui.sheet==='score')renderSheet();break;
     case 'to':callTimeout(id);break;
     case 'archive':archiveGame();render();toast('Saved to the season');break;
-    case 'practice':S.match.practice=id==='1';save();render();break;
+    case 'practice':if(scrim()&&!setScrim(0))break;S.match.practice=id==='1';save();render();break;
+    case 'scrimlen':setScrim(+id);break;
     case 'focuslv':{const f=S.match.focus||{q:[3,4]};setFocus(f.q.length?f.q:[3,4],id==='off'?'':id);break}
     case 'focusq':{const f=S.match.focus||{q:[3,4],lv:''},q=+id;setFocus(f.q.includes(q)?f.q.filter(x=>x!==q):[...f.q,q],f.lv);break}
     case 'glance':ui.glance=id==='1';render();break;
@@ -2457,8 +2477,8 @@ function act(a,e){
       if(id==='quarterMins'){
         if(S.started){toast('Quarter length can’t change once the game has started');break}
         const sd=val!==S.config.quarterMins&&swapDropAll('Quarter length');
-        S.config.quarterMins=val;S.periods=Array(4).fill(val*60);S.period=1;S.clockSeconds=val*60;S.plan={};S.fixed={};S.applied={};S.halves={};S.pinned={};S.moves={};
-        replan();save();render();toast(val+'-minute quarters · '+(val*4)+' minutes a game'+(sd?' · swaps cleared':''));break}
+        S.config.quarterMins=val;if(!scrim())newPeriods(Array(4).fill(val*60));
+        replan();save();render();toast(val+'-minute quarters · '+(val*4)+' minutes a game'+(scrim()?' (after this scrimmage)':'')+(sd?' · swaps cleared':''));break}
       if(id==='passerelle'&&S.started){toast('Passerelle can’t change once the game has started');break}
       if(GRID_KEYS.includes(id)&&qUnderway()&&S.config[id]!==val){toast('Change this at a break: mid-quarter it would move the next change');break}
       const sd=!DEV_KEYS.includes(id)&&S.config[id]!==val&&swapDropAll('A setting');
