@@ -245,6 +245,7 @@ table.pmu th,table.pmu td{padding:6px 5px;font-size:13px}
 .sheet h2{margin-top:0}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .gerow{display:grid;grid-template-columns:minmax(0,1fr) 62px 44px 44px 44px;gap:4px;align-items:center;margin-top:6px}
+.ftrow{display:grid;grid-template-columns:minmax(0,1fr) 48px 28px 48px;gap:4px;align-items:center;margin-top:6px;text-align:center}.ftrow .gen{text-align:left}.ftrow .btn{min-height:44px;min-width:0;padding:0}
 .gerow .inp{padding:0 4px;text-align:center;font-size:16px}.gerow .btn{padding:0;min-width:0;min-height:44px}.gen{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.gehead{font-size:.8rem;color:var(--muted);text-align:center}.gehead span:first-child{text-align:left}
 .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 .stack{display:grid;gap:8px}
@@ -389,7 +390,7 @@ function useTeam(id,fresh){
   save();TM.cur=id;if(!TM.ids.includes(id))TM.ids.push(id);teamsSave();
   ({m:KEY,s:SEASON_KEY}=teamKeys(id));
   S=fresh||loadState(id)||blankTeam();normState();devApply();if(!S.debug)dbgInit();
-  Object.assign(ui,{tab:'setup',sheet:null,sheetId:null,pendingOut:null,glance:false,draft:null,askScorer:null,hotConfirm:null,trace:null});
+  Object.assign(ui,{tab:'setup',sheet:null,sheetId:null,pendingOut:null,glance:false,draft:null,askScorer:null,hotConfirm:null,trace:null,ge:null,ft:null});
   replan();save();
 }
 function switchTeam(id){if(id===TM.cur||!TM.ids.includes(id)||teamBusy())return false;useTeam(id);return true}
@@ -1208,11 +1209,11 @@ function addScore(side,pts){
   S.score[side]+=pts;S.score.ev.push({side,pts,p:S.period,c:Math.round(S.clockSeconds),t:Math.round(elapsedAbs()),n:S.seqN=(S.seqN||0)+1,on:S.onCourtIds.slice()});
   S.undo.push({type:'score',side,pts});
   if(side==='us'&&S.started&&S.onCourtIds.length){ui.askScorer=S.seqN;ui.askAt=Date.now()}else if(side==='us')ui.askScorer=null;
-  log(clockLabel()+' — '+(side==='us'?tn():oppName())+' +'+pts+' ('+S.score.us+'–'+S.score.them+')');clockNudge();save();render();
+  log(clockLabel()+' — '+(side==='us'?tn():oppName())+' +'+pts+' ('+S.score.us+'–'+S.score.them+')');clockNudge();ftSync();save();render();
 }
 // −1: take a point off that side's most recent score (a +2 becomes +1; a +1 disappears). Undoable.
 // who scored: one tap on a name straight after +1/+2/+3 (skippable; disappears after 8 seconds)
-function setScorer(id){const e=S.score.ev.find(x=>x.n===ui.askScorer&&x.side==='us');ui.askScorer=null;if(!e||!P(id))return;e.by=id;log(clockLabel()+' — '+tag(id)+' scored '+e.pts);save();render()}
+function setScorer(id){const e=S.score.ev.find(x=>x.n===ui.askScorer&&x.side==='us');ui.askScorer=null;if(!e||!P(id))return;e.by=id;log(clockLabel()+' — '+tag(id)+' scored '+e.pts);ftSync();save();render()}
 const askLive=()=>ui.askScorer&&Date.now()-(ui.askAt||0)<8000&&S.score.ev.some(x=>x.n===ui.askScorer);
 function scorerStrip(){
   if(!askLive())return '';const e=S.score.ev.find(x=>x.n===ui.askScorer);
@@ -1222,12 +1223,12 @@ function scorerStrip(){
 function pointsBy(){const o={};S.score.ev.forEach(e=>{if(e.side==='us'&&e.by)o[e.by]=(o[e.by]||0)+e.pts});return o}
 function scoreMinus(side){
   if(S.clockRunning)tick();
-  const ev=S.score.ev;let i=ev.length-1;while(i>=0&&ev[i].side!==side)i--;
+  const ev=S.score.ev;let i=ev.length-1;while(i>=0&&(ev[i].side!==side||ev[i].fix))i--;
   if(i<0||S.score[side]<=0){toast('No '+(side==='us'?tn():oppName())+' points to take off');return}
   const prev={...ev[i]};
   if(ev[i].pts>1)ev[i].pts--;else ev.splice(i,1);
   S.score[side]--;S.undo.push({type:'scorefix',side,i,prev});
-  log(clockLabel()+' — SCORE FIX: '+(side==='us'?tn():oppName())+' −1 ('+S.score.us+'–'+S.score.them+')');save();render();
+  log(clockLabel()+' — SCORE FIX: '+(side==='us'?tn():oppName())+' −1 ('+S.score.us+'–'+S.score.them+')');ftSync();save();render();
   toast((side==='us'?tn():oppName())+' −1 · '+S.score.us+'–'+S.score.them,'undo');
 }
 const toWindow=p=>p<=2?'h1':p<=4?'h2':'ot'+p;
@@ -1264,7 +1265,8 @@ function scoreLine(){if(!S.score.ev.length&&!S.score.us&&!S.score.them)return ''
 
 /* season (kept on this phone, separate from the match) */
 function seasonLoad(){try{const r=localStorage.getItem(SEASON_KEY),o=r?JSON.parse(r):null;return o&&o.v===1&&Array.isArray(o.games)?o:{v:1,games:[]}}catch(e){return {v:1,games:[]}}}
-function seasonSave(se){try{localStorage.setItem(SEASON_KEY,JSON.stringify(se))}catch(e){}}
+function seasonSave(se){const b=JSON.stringify(seasonOwed());try{localStorage.setItem(SEASON_KEY,JSON.stringify(se))}catch(e){}
+  const o=seasonOwed();if(S.debug&&JSON.stringify(o)!==b)dbg('season',[JSON.parse(JSON.stringify(o))])}   // the minutes owed feed the targets, so a trace needs them to replay
 function gameRecord(){
   const T=targets(),PM=plusMinus().pm,PB=pointsBy();
   return {id:S.match.id,date:S.match.date,opp:S.match.opp||'',practice:!!S.match.practice,us:S.score.us,them:S.score.them,scored:S.score.ev.length>0,blocks:S.config.shiftLength,app:APP_VERSION,
@@ -1277,7 +1279,8 @@ function clearSeason(){seasonSave({v:1,games:[]});S.archived=false;save();render
 // correct a saved game (e.g. from the official scoresheet). The first version stays in g.orig, so it can be put back; g.ed is when
 // the game last changed, so the newer correction wins when a backup is restored on another device. Targets never change: they're
 // what was planned that day. +/− comes from who was on court at each score, so it's dropped when the score or the minutes change.
-const gameLive=()=>S.started&&!S.finished;
+const overNow=()=>S.started&&(S.finished||S.clockSeconds<=0&&S.period>=S.periods.length);   // the last period is done, whether or not Full time was tapped
+const gameLive=()=>S.started&&!S.finished&&!(S.archived&&overNow());   // saved at the end with "Save this game" counts as over
 const geKey=p=>p.num!=null?'#'+p.num:p.name;
 function geBase(g){const {edited,ed,orig,...b}=g;return orig||b}
 function geMins(v){v=String(v).trim().replace(',','.');const m=v.match(/^(\d{1,3}):([0-5]\d)$/);const x=m?(+m[1]*60+ +m[2])/60:/^\d{1,3}(\.\d+)?$/.test(v)?+v:NaN;return x<=200?Math.round(x*10)/10:NaN}
@@ -1362,6 +1365,67 @@ function geHtml(){
     ${add.length?`<select class="inp" data-chg="ge:add" style="margin-top:8px" aria-label="Add a player"><option value="">+ Add a player who played…</option>${add.map(p=>`<option value="${p.num}">#${p.num} ${esc(p.name)}</option>`).join('')}</select>`:''}
     <div id="geWarn" style="margin-top:8px">${geWarn()}</div>
     <div class="stack" style="margin-top:8px"><button class="btn pri" data-act="gesave">Save the corrections</button>${g.edited?`<button class="btn ${d.ask?'danger':''}" data-act="geback">${d.ask?'Tap again: lose the corrections':'Put the original back'}</button>`:''}<button class="btn ghost" data-act="sheet:season">Cancel</button></div>`;
+}
+/* full-time check: compare with the scoresheet while the game is fresh. The score log is still here, so taking off a wrong basket
+   also puts +/− and points by quarter right. The game is already saved; every change updates the saved copy (ftSync). */
+const ftBaskets=()=>S.score.ev.filter(e=>e.side==='us'&&!e.by&&!e.fix);
+const ftWants=()=>overNow()&&!S.match.practice&&S.score.ev.length>0;
+function ftOpen(){ui.ft={us:'',them:''};ui.sheet='ftcheck';renderSheet()}
+// only what the check can change goes into the saved game: minutes and targets stay as they were saved. A game corrected in the
+// season list keeps its corrections (the copy to put back is updated instead)
+function ftSync(){
+  if(!S.archived||!overNow())return;
+  const se=seasonLoad(),i=se.games.findIndex(g=>g.id===S.match.id);if(i<0)return;
+  const rec=gameRecord(),g=se.games[i],t=g.edited?g.orig:g,was=JSON.stringify(t),by=new Map(rec.players.map(p=>[geKey(p),p]));
+  t.us=rec.us;t.them=rec.them;t.scored=rec.scored;t.players.forEach(p=>{const r=by.get(geKey(p));if(r){p.fouls=r.fouls;p.pm=r.pm;p.pts=r.pts}});
+  if(JSON.stringify(t)===was)return;
+  if(!g.edited)g.ed=new Date().toISOString();seasonSave(se);
+}
+const ftDone=u=>{S.undo.push(u);ftSync();save();render()};
+function ftScorer(n,id){
+  const e=overNow()&&S.score.ev.find(x=>x.n===+n&&x.side==='us'&&!x.fix);if(!e||!P(id))return false;
+  const was=e.by||null;e.by=id;log('FULL-TIME CHECK: '+qLabel(e.p)+' '+mmssShort(e.c)+' +'+e.pts+' scored by '+tag(id));ftDone({type:'ftscorer',n:+n,was});return true;
+}
+function ftDrop(n){
+  const i=overNow()?S.score.ev.findIndex(x=>x.n===+n&&x.side==='us'&&!x.by&&!x.fix):-1;if(i<0)return false;
+  const [prev]=S.score.ev.splice(i,1);S.score.us-=prev.pts;
+  log('FULL-TIME CHECK: '+qLabel(prev.p)+' '+mmssShort(prev.c)+' +'+prev.pts+' wasn’t a basket ('+S.score.us+'–'+S.score.them+')');ftDone({type:'ftdrop',i,prev});toast('+'+prev.pts+' taken off · '+S.score.us+'–'+S.score.them,'undo');return true;
+}
+// the scoresheet's final score: the difference has no time and no five on court, so it counts in the score and nowhere else
+function ftScore(us,them){
+  if(!overNow()||![us,them].every(x=>Number.isInteger(x)&&x>=0&&x<=300))return false;
+  const was=S.score.us+'–'+S.score.them,add=[['us',us],['them',them]].filter(([k,v])=>v!==S.score[k]).map(([side,v])=>({side,pts:v-S.score[side],fix:1,t:Math.round(elapsedAbs()),n:S.seqN=(S.seqN||0)+1}));
+  if(!add.length)return false;
+  add.forEach(e=>{S.score.ev.push(e);S.score[e.side]+=e.pts});log('FULL-TIME CHECK: score set to the scoresheet, '+us+'–'+them+' (was '+was+')');ftDone({type:'ftscore',add:add.map(e=>({...e}))});return true;
+}
+// a foul added or taken off after the game: it's on the player's line only (which quarter isn't known), and nobody fouls out now
+function ftFoul(id,d){
+  const s=P(id)&&st(id),n=s?s.fouls+d:-1;if(!overNow()||n<0||n>5)return false;
+  s.fouls=n;log('FULL-TIME CHECK: '+tag(id)+' F:'+n);ftDone({type:'ftfoul',id,d});return true;
+}
+// what the typed scoresheet score comes to: null = not a number, else the score and the two differences
+function ftTyped(){
+  const f=ui.ft||{},g=(v,cur)=>String(v??'').trim()===''?cur:geInt(v,300),us=g(f.us,S.score.us),them=g(f.them,S.score.them);
+  return isNaN(us)||isNaN(them)?null:{us,them,du:us-S.score.us,dt:them-S.score.them};
+}
+function ftDiff(){
+  const r=ftTyped();if(!r)return '<p class="lowcore small">The score needs whole numbers.</p>';
+  if(!r.du&&!r.dt)return `<p class="muted small">${ui.ft&&(ui.ft.us!==''||ui.ft.them!=='')?'Same as the app.':'Type the score from the scoresheet to compare.'}</p>`;
+  const w=(nm,d)=>d?esc(nm)+' '+Math.abs(d)+(d>0?' more':' fewer'):'',n=ftBaskets().length;
+  return `<p class="lowcore small">Scoresheet: ${[w(tn(),r.du),w(oppName(),r.dt)].filter(Boolean).join(' · ')}.${r.du&&n?' Sort out the baskets above first.':''}</p><button class="btn" data-act="ftscore" style="width:100%">Set the score to ${r.us}–${r.them}</button><p class="muted small">The difference has no time, so points by quarter and +/− stay as they are.</p>`;
+}
+function ftSet(k,v){if(!ui.ft||!['us','them'].includes(k))return;ui.ft[k]=String(v);const el=$('#ftDiff');if(el)el.innerHTML=ftDiff()}
+function ftHtml(){
+  const bs=ftBaskets(),pl=S.roster.filter(p=>played(p.id)>0).sort((a,b)=>(a.num??999)-(b.num??999)),g=seasonLoad().games.find(x=>x.id===S.match.id),f=ui.ft;
+  const bt=id=>`<b>#${P(id).num??'?'}</b> ${esc(String(P(id).name).split(/\s+/).slice(-1)[0])}`;
+  return `<h2>Full-time check</h2><p class="muted small" style="margin-top:-6px">Compare with the scoresheet. ${S.archived?'The game is saved, and changes here update it.':S.match.practice?'This one isn’t saved to the season.':'The game isn’t saved to the season yet.'}</p>
+    ${g&&g.edited?'<p class="note">This game was corrected in the Season list. Its corrections stay as they are: changes here only change the original.</p>':''}
+    ${bs.length?`<h3>Baskets with no scorer (${bs.length})</h3>${bs.map(e=>{const on=(e.on||[]).filter(id=>P(id)),more=pl.filter(p=>!on.includes(p.id));return `<div class="whos"><b>${qLabel(e.p)} ${mmssShort(e.c)} · +${e.pts}</b><div class="whog">${on.map(id=>`<button class="btn" data-act="ftby:${e.n}:${id}">${bt(id)}</button>`).join('')}<button class="btn danger" style="grid-column:1/-1" data-act="ftdrop:${e.n}">Not a basket</button></div>${more.length?`<select class="inp" data-chg="ftby:${e.n}" style="margin-top:6px" aria-label="Someone else scored"><option value="">Someone else…</option>${more.map(p=>`<option value="${p.id}">#${p.num??'?'} ${esc(p.name)}</option>`).join('')}</select>`:''}</div>`}).join('')}`:S.score.ev.some(e=>e.side==='us')?'<p class="muted small">Every basket has a scorer.</p>':''}
+    <h3>Score</h3><div class="grid2"><label class="small">${esc(tn())} · app ${S.score.us}<input class="inp" type="text" inputmode="numeric" data-chg="ft:us" value="${esc(f.us)}" placeholder="${S.score.us}" aria-label="Our score on the scoresheet"></label><label class="small">${esc(oppName())} · app ${S.score.them}<input class="inp" type="text" inputmode="numeric" data-chg="ft:them" value="${esc(f.them)}" placeholder="${S.score.them}" aria-label="Their score on the scoresheet"></label></div>
+    <div id="ftDiff" style="margin-top:6px">${ftDiff()}</div>
+    <h3>Fouls · ${sum(pl.map(p=>st(p.id).fouls))}</h3>${pl.map(p=>{const n=st(p.id).fouls,l=esc('#'+(p.num??'?')+' '+p.name);return `<div class="ftrow"><span class="gen"><b>#${p.num??'?'}</b> ${esc(p.name)}</span><button class="btn" data-act="ftfoul:${p.id}:-1" ${n>0?'':'disabled'} aria-label="One foul off ${l}">−</button><b>${n}</b><button class="btn" data-act="ftfoul:${p.id}:1" ${n<5?'':'disabled'} aria-label="One foul on ${l}">+</button></div>`}).join('')}
+    <p class="muted small">Team fouls by ${perWord()} stay as they were logged.</p>
+    <div class="grid2" style="margin-top:8px"><button class="btn ghost" data-act="close">Skip</button><button class="btn pri" data-act="ftok">Looks right</button></div>`;
 }
 // paste a game exported earlier (this app's CSV or WhatsApp summary)
 function importGame(text,date,opp,us,them){
@@ -1450,7 +1514,9 @@ const shortName=p=>'#'+(p.num??'?')+' '+String(p.name).split(/\s+/).slice(-1)[0]
 const captOf=()=>S.roster.find(p=>p.capt)||null;
 const captTag=p=>p&&p.capt?' (Capt.)':'';   // added after the name where it's shown, never stored in it
 // points by quarter, from the score log (each score records its quarter): quarters so far, or all of them at full time
-function qRows(upto){const Q=scoreByQ(),n=Math.min(Q.length,upto||(S.finished?Q.length:S.period));return Q.slice(0,n).map((q,i)=>({l:qLabel(i+1),us:q.us,them:q.them,m:q.us-q.them}))}
+function qRows(upto){const Q=scoreByQ(),n=Math.min(Q.length,upto||(S.finished?Q.length:S.period));const R=Q.slice(0,n).map((q,i)=>({l:qLabel(i+1),us:q.us,them:q.them,m:q.us-q.them})),x=n===Q.length?scoreFix():null;if(x)R.push({l:'Not timed',...x,m:x.us-x.them,fix:1});return R}
+// points from the full-time check: in the score, but no quarter
+function scoreFix(){const x={us:0,them:0};S.score.ev.forEach(e=>{if(e.fix)x[e.side]+=e.pts});return x.us||x.them?x:null}
 const sgn=v=>v>0?'+'+v:v<0?'−'+(-v):'0';
 function qTable(rows,totLabel){if(!rows.length)return '';const t={us:sum(rows.map(r=>r.us)),them:sum(rows.map(r=>r.them))};
   return `<div class="tbl"><table class="qpts"><thead><tr><th></th><th>${esc(tn())}</th><th>${esc(oppName())}</th><th>Margin</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r.l}</td><td>${r.us}</td><td>${r.them}</td><td class="trk ${r.m>0?'ok':r.m<0?'way':''}">${sgn(r.m)}</td></tr>`).join('')}<tr class="qtot"><td>${totLabel||'Total'}</td><td>${t.us}</td><td>${t.them}</td><td><b>${sgn(t.us-t.them)}</b></td></tr></tbody></table></div>`}
@@ -1526,7 +1592,7 @@ function addFoul(id,delta){
   }else if(s.fouls<5&&s.fouledOut){s.fouledOut=false;replan()}
   else{log(clockLabel()+' — Foul '+(delta>0?'':'removed ')+tag(id)+' (F:'+s.fouls+')');
     if(S.config.foulAware&&S.config.foulAware!=='off'&&foulBand(id)!==band0)replan()}   // only a foul that crosses a foul-trouble line re-plans
-  save();render();
+  ftSync();save();render();
   if(delta>0)toast('F:'+s.fouls+' — '+tag(id)+' · team fouls '+tfUs()+(tfUs()===4?' (next = free throws)':tfUs()>=5?' (free throws)':''),'foulundo:'+id);
 }
 function undoLabel(u){
@@ -1541,6 +1607,10 @@ function undoLabel(u){
   if(u.type==='mins')return 'minutes fix on '+nm(u.id);
   if(u.type==='chgmove')return 'change time move';
   if(u.type==='tfthem')return oppName()+' team foul'+(u.d<0?' removal':'');
+  if(u.type==='ftscorer')return 'scorer';
+  if(u.type==='ftdrop')return 'basket removed';
+  if(u.type==='ftscore')return 'scoresheet score';
+  if(u.type==='ftfoul')return 'foul change on '+nm(u.id);
   if(u.type==='scorefix')return (u.side==='us'?tn():oppName())+' −1';
   return 'last action';
 }
@@ -1558,8 +1628,12 @@ function undo(){
   else if(u.type==='scorefix'){const ev=S.score.ev;if(u.prev.pts>1&&ev[u.i]&&ev[u.i].n===u.prev.n)ev[u.i].pts=u.prev.pts;else ev.splice(u.i,0,u.prev);S.score[u.side]++;log(clockLabel()+' — UNDO: score fix ('+S.score.us+'–'+S.score.them+')')}
   else if(u.type==='chgmove'){const c=S.undo[u.ref];if(c)shiftChange(c,-u.d);log(clockLabel()+' — UNDO: change back at '+(c?mmss(c.c):'?'))}
   else if(u.type==='mins'){const s=st(u.id);s.playedSeconds=u.before;s.periodSplit=u.split;log(clockLabel()+' — UNDO: minutes fix on '+tag(u.id)+' (back to '+mmss(u.before)+')')}
+  else if(u.type==='ftscorer'){const e=S.score.ev.find(x=>x.n===u.n);if(e){if(u.was)e.by=u.was;else delete e.by}log('FULL-TIME CHECK undo: scorer taken off')}
+  else if(u.type==='ftdrop'){S.score.ev.splice(u.i,0,u.prev);S.score.us+=u.prev.pts;log('FULL-TIME CHECK undo: basket back ('+S.score.us+'–'+S.score.them+')')}
+  else if(u.type==='ftscore'){S.score.ev.splice(S.score.ev.length-u.add.length);u.add.forEach(e=>{S.score[e.side]-=e.pts});log('FULL-TIME CHECK undo: score back to '+S.score.us+'–'+S.score.them)}
+  else if(u.type==='ftfoul'){st(u.id).fouls-=u.d;log('FULL-TIME CHECK undo: '+tag(u.id)+' F:'+st(u.id).fouls)}
   else if(u.type==='foul'){const s=st(u.id);s.fouls-=u.delta;s.fouledOut=u.wasOut;if(u.tk)S.tf[u.tk]=Math.max(0,(S.tf[u.tk]||0)-(u.tfD||0));S.onCourtIds=u.prevOn;log(clockLabel()+' — UNDO: foul change on '+tag(u.id)+' (F:'+s.fouls+')')}
-  ui.pendingOut=null;replan();save();render();
+  ui.pendingOut=null;replan();ftSync();save();render();
   toast('Undone: '+what+(u.type==='mass'?' — all '+u.ins.length+' players back':''));
 }
 function setActive(id,on){
@@ -1689,8 +1763,8 @@ function leagueCheck(){
 function waText(full){
   const n=S.periods.length-NREG();
   let t='🏀 '+tfull().toUpperCase()+' — MINUTES & SUBS LOG'+(S.match.practice?scrim()?' (SCRIMMAGE)':' (PRACTICE)':'')+'\n📅 '+S.match.date+(S.match.opp?' | vs '+S.match.opp:'')+' | ⏱ '+mt(regMins())+' min regulation'+(n>0?' + '+n+' OT':'')+'\n';
-  if(scoreLine())t+='🏆 '+scoreLine()+' · by '+perWord()+' '+scoreByQ().map(q=>q.us+'–'+q.them).join(', ')+'\n';
-  {const PB=pointsBy(),ks=Object.keys(PB).sort((a,b)=>PB[b]-PB[a]);if(ks.length){const un=S.score.ev.filter(e=>e.side==='us'&&!e.by).reduce((t,e)=>t+e.pts,0);t+='🏀 Scoring: '+ks.map(id=>shortName(P(id)).replace(/^#\d+ /,'')+' '+PB[id]).join(', ')+(un?' (+'+un+' not logged)':'')+'\n'}}
+  if(scoreLine())t+='🏆 '+scoreLine()+' · by '+perWord()+' '+scoreByQ().map(q=>q.us+'–'+q.them).join(', ')+(scoreFix()?' (the rest not timed)':'')+'\n';
+  {const PB=pointsBy(),ks=Object.keys(PB).sort((a,b)=>PB[b]-PB[a]);if(ks.length){const un=Math.max(0,S.score.ev.filter(e=>e.side==='us'&&!e.by).reduce((t,e)=>t+e.pts,0));t+='🏀 Scoring: '+ks.map(id=>shortName(P(id)).replace(/^#\d+ /,'')+' '+PB[id]).join(', ')+(un?' (+'+un+' not logged)':'')+'\n'}}
   if(S.tos.length)t+='⏱ Timeouts: '+tn()+' '+S.tos.filter(x=>x.side==='us').length+', '+oppName()+' '+S.tos.filter(x=>x.side==='them').length+'\n';
   t+='------------------------------------\n';
   (full?exportRows():exportRows().sort((x,y)=>(x.p.num??999)-(y.p.num??999))).forEach(r=>{
@@ -1797,7 +1871,7 @@ function viewGlance(){
     ${S.started&&!S.finished?`<div class="gpanel">
       <div class="gsrow"><span class="gsl"><span>${esc(tn())}</span><b>${S.score.us}</b></span><button class="btn gm" data-act="scm:us" ${S.score.us?'':'disabled'} aria-label="${esc(tn())} minus 1">−1</button><button class="btn" data-act="gsc:us:1">+1</button><button class="btn" data-act="gsc:us:2">+2</button><button class="btn" data-act="gsc:us:3">+3</button></div>
       <div class="gsrow"><span class="gsl"><span>${esc(oppName())}</span><b>${S.score.them}</b></span><button class="btn gm" data-act="scm:them" ${S.score.them?'':'disabled'} aria-label="${esc(oppName())} minus 1">−1</button><button class="btn" data-act="gsc:them:1">+1</button><button class="btn" data-act="gsc:them:2">+2</button><button class="btn" data-act="gsc:them:3">+3</button></div>
-      ${S.score.ev.length?`<div class="gqt muted small">${qRows().map(r=>r.l+' '+r.us+'–'+r.them).join(' · ')}</div>`:''}
+      ${S.score.ev.length?`<div class="gqt muted small">${qRows().filter(r=>!r.fix).map(r=>r.l+' '+r.us+'–'+r.them).join(' · ')}</div>`:''}
       ${scorerStrip()}
       ${(()=>{const c=captOf();return c&&availList().includes(c)&&!S.onCourtIds.includes(c.id)?`<div class="muted small">Captain ${esc(shortName(c))} is on the bench: name a floor captain.</div>`:''})()}
       <div class="gfl"><span class="muted small">Foul on</span>${S.onCourtIds.map(id=>{const f=st(id).fouls;return `<button class="btn gf ${f>=4?'bad':f>=3?'warn':''}" data-act="foul:${id}" data-lp="foulm:${id}"><b>#${P(id).num??'?'}</b><em>${esc(String(P(id).name).split(/\s+/).slice(-1)[0])}</em><span>F${f}</span></button>`}).join('')}<button class="btn gf" data-act="tft:1" data-lp="tfm:1" aria-label="${esc(oppName())} foul, hold to take one off">Their foul<span>TF ${tfThem()}</span></button></div>
@@ -2087,7 +2161,7 @@ function secOpen(id){if(!ui.sec){ui.sec={...SEC_DEF};try{const v=JSON.parse(loca
 function secToggle(id){secOpen(id);ui.sec[id]=!ui.sec[id];try{localStorage.setItem('pumas_setup_open',JSON.stringify(ui.sec))}catch(e){}}
 function pmSection(){
   const {pm,units,counted}=plusMinus();if(!counted)return S.score.ev.length?'':'';
-  const PB=pointsBy(),anyPts=Object.keys(PB).length,unass=S.score.ev.filter(e=>e.side==='us'&&!e.by).reduce((t,e)=>t+e.pts,0);
+  const PB=pointsBy(),anyPts=Object.keys(PB).length,unass=Math.max(0,S.score.ev.filter(e=>e.side==='us'&&!e.by).reduce((t,e)=>t+e.pts,0));
   const rows=exportRows().filter(r=>r.a>0).map(r=>({p:r.p,a:r.a,v:pm[r.p.id]||0,pts:PB[r.p.id]||0})).sort((x,y)=>y.v-x.v||y.a-x.a);
   const sg=v=>v>0?'+'+v:v<0?'−'+(-v):'0';
   const nm=ids=>ids.map(id=>P(id)?'#'+(P(id).num??'?'):'?').join(' ');
@@ -2097,7 +2171,7 @@ function pmSection(){
 }
 function viewLogs(){
   const L=S.subLogs.slice().reverse().map(l=>`<div class="${l.kind==='rp'?'rp':''}"><span class="t">${l.time}</span>${esc(l.text)}</div>`).join('')||'<div class="muted">No events yet.</div>';
-  return `${S.finished&&S.match.practice?`<div class="banner lock">${scrim()?'Scrimmage':'Practice match'} — not saved to the season.${scrim()?'':' <button class="btn sm" data-act="archive">Save it anyway</button>'}</div>`:''}${S.score.ev.length?'<h2>Points by quarter</h2>'+qTable(qRows()):''}${pmSection()}<h2>Sub log</h2><div class="log">${L}</div>
+  return `${S.finished&&S.match.practice?`<div class="banner lock">${scrim()?'Scrimmage':'Practice match'} — not saved to the season.${scrim()?'':' <button class="btn sm" data-act="archive">Save it anyway</button>'}</div>`:''}${overNow()&&S.score.ev.length?`<button class="btn" data-act="ftcheck" style="width:100%;margin-top:8px">✓ Full-time check${ftBaskets().length?' · '+ftBaskets().length+' with no scorer':''}</button>`:''}${S.score.ev.length?'<h2>Points by quarter</h2>'+qTable(qRows()):''}${pmSection()}<h2>Sub log</h2><div class="log">${L}</div>
   ${(()=>{const t=seasonTable();
     const head=`<div class="hline"><h2>Season</h2>${S.started&&!S.archived&&!S.match.practice?'<button class="btn sm" data-act="archive">Save this game</button>':''}<button class="btn sm ghost" data-act="sheet:import">+ Past game</button>${t?'<button class="btn sm ghost" data-act="sheet:season">Manage</button>':''}</div>`;
     if(!t)return head+'<div style="margin-top:8px"><button class="btn ghost" data-act="sheet:restore">Restore from a backup</button></div><p class="note">Games are saved here at full time, so you can see minutes across the season. Add earlier games from their CSV or WhatsApp summary.</p>';
@@ -2124,6 +2198,7 @@ function viewLogs(){
 }
 function renderSheet(){
   const el=$('#sheet');if(!ui.sheet){el.innerHTML='';return}
+  const keep=['gedit','ftcheck'].includes(ui.sheet)&&ui.sheetWas===ui.sheet,top=keep?($('#sheet .sheet')||{}).scrollTop||0:0;ui.sheetWas=ui.sheet;   // long lists stay where they were
   let h='';
   if(ui.sheet==='menu'){
     const p=P(ui.sheetId),on=S.onCourtIds.includes(p.id),av=p.active&&!st(p.id).fouledOut;
@@ -2166,7 +2241,7 @@ function renderSheet(){
       <div class="stack">${scrim()?'':`<button class="btn" data-act="ot:${S.config.otLengthMins}">+${S.config.otLengthMins} min overtime</button>`}
       <button class="btn pri" data-act="fulltime">Full time</button><button class="btn ghost" data-act="close">Close</button></div>`;
   }else if(ui.sheet==='score'){
-    const ev=S.score.ev.slice(-4).reverse();
+    const ev=S.score.ev.filter(e=>!e.fix).slice(-4).reverse();
     h=`<h2>${esc(scoreLine()||tn()+' 0 – 0 '+oppName())}</h2>
     <div class="scgrid"><div class="sccol"><h3>${esc(tn())}</h3><button class="btn big" data-act="sc:us:2">+2</button><button class="btn big" data-act="sc:us:3">+3</button><button class="btn big" data-act="sc:us:1">+1</button><button class="btn" data-act="scm:us" ${S.score.us?'':'disabled'}>−1 correction</button></div>
     <div class="sccol"><h3>${esc(oppName())}</h3><button class="btn big" data-act="sc:them:2">+2</button><button class="btn big" data-act="sc:them:3">+3</button><button class="btn big" data-act="sc:them:1">+1</button><button class="btn" data-act="scm:them" ${S.score.them?'':'disabled'}>−1 correction</button></div></div>
@@ -2201,6 +2276,9 @@ function renderSheet(){
   }else if(ui.sheet==='gedit'){
     if(!ui.ge){ui.sheet=null;el.innerHTML='';return}
     h=geHtml();
+  }else if(ui.sheet==='ftcheck'){
+    if(!ui.ft||!overNow()){ui.sheet=null;el.innerHTML='';return}
+    h=ftHtml();
   }else if(ui.sheet==='sgclear'){
     h=`<h2>Clear the season?</h2><p class="muted">Removes every saved game from this phone. Copy the season CSV first if you want a record.</p><div class="stack"><button class="btn danger" data-act="sgclearyes">Yes, clear it</button><button class="btn ghost" data-act="close">Cancel</button></div>`;
   }else if(ui.sheet==='resync'){
@@ -2323,6 +2401,7 @@ function renderSheet(){
     <div class="stack"><button class="btn danger" data-act="reset">Yes, start fresh</button><button class="btn ghost" data-act="close">Cancel</button></div>`;
   }
   el.innerHTML=`<div class="scrim" data-act="scrim"><div class="sheet" role="dialog">${h}</div></div>`;
+  if(top){const n=$('#sheet .sheet');if(n)n.scrollTop=top}
 }
 function resync(delta,abs){
   if(S.clockRunning)tick();
@@ -2391,9 +2470,9 @@ function chgMoveHtml(){
     <div class="grid2" style="margin-top:8px"><input id="chgv" type="text" inputmode="numeric" placeholder="went on at mm:ss" style="min-height:48px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:0 12px"><button class="btn" data-act="chgset">Move</button></div>
     <p class="note">Between ${mmss(L.hi)}${(()=>{const C=chgList(),p=C.length>1?C[C.length-2].c:len();return L.hi>=p-0.5?' ('+(C.length>1?'the change before':'start of '+qLabel(S.period))+')':''})()} and ${mmss(L.lo)}${L.lo<=S.clockSeconds+0.5?' (now)':''}.</p>`}
 /* ---------- debug trace: every engine action + what the app believed afterwards ---------- */
-const APP_VERSION='2.27.0 · 2026-11-25';
+const APP_VERSION='2.28.0 · 2026-11-25';
 let dbgDepth=0;
-function dbgInit(){S.debug={app:APP_VERSION,created:new Date().toISOString(),start:{config:JSON.parse(JSON.stringify(S.config)),roster:JSON.parse(JSON.stringify(S.roster)),closersIds:S.closersIds.slice(),periods:S.periods.slice(),focus:S.match.focus||null,scrim:S.match.scrim||0},ev:[]}}
+function dbgInit(){S.debug={app:APP_VERSION,created:new Date().toISOString(),start:{config:JSON.parse(JSON.stringify(S.config)),roster:JSON.parse(JSON.stringify(S.roster)),closersIds:S.closersIds.slice(),periods:S.periods.slice(),focus:S.match.focus||null,scrim:S.match.scrim||0,owed:JSON.parse(JSON.stringify(seasonOwed()))},ev:[]}}
 const ids2n=a=>(a||[]).map(id=>{const p=P(id);return p?p.num:id});
 function dbgSnap(){
   const n=nextPlanned(),lc=liveCalls(),T=targets(),now=elapsedAbs(),plan={},tg={},secs={},fouls={};
@@ -2423,7 +2502,7 @@ doSub=traced('doSub',doSub);quickSwap=traced('quickSwap',quickSwap);skipPlanned=
 addFoul=traced('addFoul',addFoul);undoFoul=traced('undoFoul',undoFoul);undo=traced('undo',undo);
 startClock=traced('startClock',startClock);pauseClock=traced('pauseClock',pauseClock);resync=traced('resync',resync);tableGo=traced('tableGo',tableGo);tableCancel=traced('tableCancel',tableCancel);moveChange=traced('moveChange',moveChange);
 swapSlots=traced('swapSlots',swapSlots);swapClear=traced('swapClear',swapClear);setActive=traced('setActive',setActive);setNotPicked=traced('setNotPicked',setNotPicked);setFocus=traced('setFocus',setFocus);setScrim=traced('setScrim',setScrim);setHot=traced('setHot',setHot);confirmHot=traced('confirmHot',confirmHot);setCold=traced('setCold',setCold);
-startNextPeriod=traced('startNextPeriod',startNextPeriod);pinBlock=traced('pinBlock',pinBlock);addScore=traced('addScore',addScore);callTimeout=traced('callTimeout',callTimeout);importGame=traced('importGame',importGame);unpinBlock=traced('unpinBlock',unpinBlock);moveBoundary=traced('moveBoundary',moveBoundary);adjMins=traced('adjMins',adjMins);addTeamFoulThem=traced('addTeamFoulThem',addTeamFoulThem);scoreMinus=traced('scoreMinus',scoreMinus);setScorer=traced('setScorer',setScorer);addOT=traced('addOT',addOT);endPeriodEarly=traced('endPeriodEarly',endPeriodEarly);fullTime=traced('fullTime',fullTime);
+startNextPeriod=traced('startNextPeriod',startNextPeriod);pinBlock=traced('pinBlock',pinBlock);addScore=traced('addScore',addScore);callTimeout=traced('callTimeout',callTimeout);importGame=traced('importGame',importGame);unpinBlock=traced('unpinBlock',unpinBlock);moveBoundary=traced('moveBoundary',moveBoundary);adjMins=traced('adjMins',adjMins);addTeamFoulThem=traced('addTeamFoulThem',addTeamFoulThem);scoreMinus=traced('scoreMinus',scoreMinus);setScorer=traced('setScorer',setScorer);ftScorer=traced('ftScorer',ftScorer);ftDrop=traced('ftDrop',ftDrop);ftScore=traced('ftScore',ftScore);ftFoul=traced('ftFoul',ftFoul);addOT=traced('addOT',addOT);endPeriodEarly=traced('endPeriodEarly',endPeriodEarly);fullTime=traced('fullTime',fullTime);
 // Compact trace (pumas-debug-2): each event keeps only what changed since the one before, then the whole thing is
 // gzipped and base64'd so a full game fits a phone clipboard / chat paste. Long traces are split into parts.
 const TRACE_PART_CHARS=12000;
@@ -2502,7 +2581,7 @@ function act(a,e){
     case 'tablego':tableGo();save();render();break;
     case 'tablecancel':tableCancel();break;
     case 'askno':ui.askDone=null;render();break;
-    case 'undo':undo();if(ui.sheet==='score')renderSheet();break;
+    case 'undo':undo();if(ui.sheet==='score'||ui.sheet==='ftcheck')renderSheet();break;
     case 'foulundo':undoFoul(id);break;
     case 'skipplan':skipPlanned();break;
     case 'sheet':ui.sheet=id==='to'?'to':id;renderSheet();break;
@@ -2510,7 +2589,7 @@ function act(a,e){
     case 'fdkeep':S.foulAck[id]=4;log(clockLabel()+' — '+tag(id)+' kept on with 4 fouls');save();render();break;
     case 'sc':addScore(id,+v);if(ui.sheet==='score')renderSheet();break;
     case 'to':callTimeout(id);break;
-    case 'archive':archiveGame();render();toast('Saved to the season');break;
+    case 'archive':archiveGame();render();toast('Saved to the season');if(ftWants())ftOpen();break;
     case 'practice':if(scrim()&&!setScrim(0))break;S.match.practice=id==='1';save();render();break;
     case 'scrimlen':setScrim(+id);break;
     case 'focuslv':{const f=S.match.focus||{q:[3,4]};setFocus(f.q.length?f.q:[3,4],id==='off'?'':id);break}
@@ -2561,7 +2640,13 @@ function act(a,e){
     case 'endnow':endPeriodEarly();break;
     case 'nextp':startNextPeriod();break;
     case 'ot':addOT(+id);break;
-    case 'fulltime':fullTime();break;
+    case 'fulltime':fullTime();if(ftWants())ftOpen();break;
+    case 'ftcheck':if(overNow())ftOpen();break;
+    case 'ftby':ftScorer(id,v);renderSheet();break;
+    case 'ftdrop':ftDrop(id);renderSheet();break;
+    case 'ftfoul':ftFoul(id,+v);renderSheet();break;
+    case 'ftscore':{const r=ftTyped();if(r&&ftScore(r.us,r.them)){ui.ft={us:'',them:''};toast('Score set to '+r.us+'–'+r.them,'undo')}renderSheet();break}
+    case 'ftok':{const r=ftTyped();if(!r||r.du||r.dt){toast('The scoresheet score is different: set it, or Skip',0,0,4000);break}ui.sheet=null;ui.ft=null;render();break}
     case 'rs':resync(+id);break;
     case 'chgmv':{const L=lastChange();if(L)moveChange(L.u.c+(+id));renderSheet();break}
     case 'chgset':{const m=($('#chgv').value||'').match(/^(\d{1,2}):?(\d{2})$/);if(!m){toast('Type the time like 3:43');break}moveChange((+m[1])*60+(+m[2]));renderSheet();break}
@@ -2622,6 +2707,8 @@ document.addEventListener('click',e=>{
 document.addEventListener('input',e=>{const f=e.target.dataset&&e.target.dataset.flt;if(!f)return;const q=e.target.value.trim().toLowerCase();document.querySelectorAll(f).forEach(r=>r.hidden=!!q&&!r.textContent.toLowerCase().includes(q))});
 document.addEventListener('change',e=>{
   const c=e.target.dataset.chg;if(!c)return;const [k,id]=c.split(':'),v=e.target.value;
+  if(k==='ft'){ftSet(id,v);return}
+  if(k==='ftby'){if(v){ftScorer(id,v);renderSheet()}return}
   if(k==='ge'){geSet(id,v);return}   // a saved game being corrected: nothing changes until it's saved
   if(k==='opp')S.match.opp=v;else if(k==='date')S.match.date=v;
   else if(k==='note')S.match.note=v.trim().slice(0,140);
