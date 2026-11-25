@@ -244,6 +244,8 @@ table.pmu th,table.pmu td{padding:6px 5px;font-size:13px}
 .sheet{width:100%;max-width:720px;background:var(--panel);border-top:2px solid var(--accent);border-radius:18px 18px 0 0;padding:16px max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));max-height:85vh;overflow:auto}
 .sheet h2{margin-top:0}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.gerow{display:grid;grid-template-columns:minmax(0,1fr) 62px 44px 44px 44px;gap:4px;align-items:center;margin-top:6px}
+.gerow .inp{padding:0 4px;text-align:center;font-size:16px}.gerow .btn{padding:0;min-width:0;min-height:44px}.gen{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.gehead{font-size:.8rem;color:var(--muted);text-align:center}.gehead span:first-child{text-align:left}
 .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 .stack{display:grid;gap:8px}
 /* setup */
@@ -1269,9 +1271,98 @@ function gameRecord(){
     players:S.roster.filter(p=>p.active||played(p.id)>0).map(p=>({num:p.num,name:p.name,tier:p.tier,mins:Math.round(played(p.id)/6)/10,tgt:T[p.id]||0,fouls:st(p.id).fouls,pm:PM[p.id]||0,pts:PB[p.id]||0})),
     np:S.roster.filter(p=>p.np&&!p.active&&played(p.id)===0&&p.num!=null).map(p=>({num:p.num,name:p.name,tier:p.tier}))};
 }
-function archiveGame(){const se=seasonLoad(),rec=gameRecord(),i=se.games.findIndex(g=>g.id===rec.id);if(i>=0)se.games[i]=rec;else se.games.push(rec);seasonSave(se);S.archived=true;save()}
+function archiveGame(){const se=seasonLoad(),rec=gameRecord(),i=se.games.findIndex(g=>g.id===rec.id);if(i>=0)se.games[i]=se.games[i].edited?{...se.games[i],orig:rec}:rec;else se.games.push(rec);seasonSave(se);S.archived=true;save()}   // a corrected game keeps its corrections
 function removeSeasonGame(id){const se=seasonLoad();se.games=se.games.filter(g=>g.id!==id);seasonSave(se);if(id===S.match.id)S.archived=false;save();render()}
 function clearSeason(){seasonSave({v:1,games:[]});S.archived=false;save();render()}
+// correct a saved game (e.g. from the official scoresheet). The first version stays in g.orig, so it can be put back; g.ed is when
+// the game last changed, so the newer correction wins when a backup is restored on another device. Targets never change: they're
+// what was planned that day. +/− comes from who was on court at each score, so it's dropped when the score or the minutes change.
+const gameLive=()=>S.started&&!S.finished;
+const geKey=p=>p.num!=null?'#'+p.num:p.name;
+function geBase(g){const {edited,ed,orig,...b}=g;return orig||b}
+function geMins(v){v=String(v).trim().replace(',','.');const m=v.match(/^(\d{1,3}):([0-5]\d)$/);const x=m?(+m[1]*60+ +m[2])/60:/^\d{1,3}(\.\d+)?$/.test(v)?+v:NaN;return x<=200?Math.round(x*10)/10:NaN}
+const geInt=(v,max)=>/^\d{1,3}$/.test(String(v).trim())&&+v<=max?+v:NaN;
+function geOpen(id){
+  if(gameLive()){toast('Finish this game first, then correct saved games');return false}
+  const g=seasonLoad().games.find(x=>x.id===id);if(!g)return false;
+  ui.ge={id,ask:false,date:String(g.date||''),opp:g.opp||'',us:g.scored?String(g.us):'',them:g.scored?String(g.them):'',
+    rows:g.players.map(p=>({p,mins:String(p.mins),pts:p.pts==null?'':String(p.pts),fouls:String(p.fouls||0)})).sort((a,b)=>(a.p.num??999)-(b.p.num??999))};
+  ui.sheet='gedit';renderSheet();return true;
+}
+// the typed values as a game record, or {err}
+function geRead(){
+  const d=ui.ge,g=d&&seasonLoad().games.find(x=>x.id===d.id);if(!g)return {err:'That game isn’t in the season any more'};
+  const base=geBase(g),was=new Map(base.players.map(p=>[geKey(p),p])),players=[];
+  const blank=String(d.us).trim()===''&&String(d.them).trim()==='',us=blank?(base.scored?0:base.us||0):geInt(d.us,300),them=blank?(base.scored?0:base.them||0):geInt(d.them,300);
+  if(isNaN(us)||isNaN(them))return {err:'Check the score: both need a whole number'};
+  if(!d.rows.length)return {err:'A game needs at least one player'};
+  for(const r of d.rows){
+    const nm='#'+(r.p.num??'?')+' '+r.p.name,mins=r.mins===String(r.p.mins)?+r.p.mins:geMins(r.mins),fouls=geInt(r.fouls===''?0:r.fouls,9),pts=String(r.pts).trim()===''?null:geInt(r.pts,200);
+    if(isNaN(mins))return {err:nm+': minutes as 12:30 or 12.5'};
+    if(isNaN(fouls))return {err:nm+': check the fouls'};
+    if(pts!==null&&isNaN(pts))return {err:nm+': check the points'};
+    const o=was.get(geKey(r.p)),{pm,...rest}=r.p,n={...rest,mins,fouls};if(pts===null)delete n.pts;else n.pts=pts;
+    if(o&&typeof o.pm==='number')n.pm=o.pm;players.push(n);
+  }
+  const scored=!blank,sameScore=scored===!!base.scored&&us===base.us&&them===base.them;
+  const sameMins=players.length===base.players.length&&players.every(p=>{const o=was.get(geKey(p));return o&&o.mins===p.mins});
+  const hadPm=base.players.some(p=>typeof p.pm==='number'),noPm=hadPm&&!(sameScore&&sameMins);
+  if(noPm)players.forEach(p=>{delete p.pm});
+  const date=String(d.date).trim()||base.date,opp=String(d.opp).trim();
+  const same=sameScore&&sameMins&&date===base.date&&opp===(base.opp||'')&&players.every(p=>{const o=was.get(geKey(p));return (o.pts??null)===(p.pts??null)&&(o.fouls||0)===p.fouls});
+  const tot=sum(players.map(p=>p.mins)),tot0=sum(base.players.map(p=>p.mins)),pts=sum(players.map(p=>+p.pts||0));
+  return {g,base,same,noPm,tot,tot0,pts,rec:{...base,date,opp,us,them,scored,players,...(base.np?{np:base.np.filter(x=>!players.some(p=>p.num===x.num))}:{})}};
+}
+function geWarn(){
+  const r=geRead();if(r.err)return `<p class="lowcore small">${esc(r.err)}</p>`;
+  const w=[],k=r.rec;
+  if(k.scored&&k.players.some(p=>p.pts!=null)&&r.pts!==k.us)w.push(r.pts<k.us?`Player points add up to ${r.pts}, our score is ${k.us}: ${k.us-r.pts} with no scorer.`:`Player points add up to ${r.pts}, more than our score of ${k.us}.`);
+  if(Math.abs(r.tot-r.tot0)>=1)w.push(`Minutes add up to ${m1(r.tot)}; the game was saved with ${m1(r.tot0)}.`);
+  if(k.players.some(p=>p.fouls>5))w.push('Someone has more than 5 fouls.');
+  return (w.length?w.map(x=>`<p class="lowcore small">${x}</p>`).join(''):'<p class="muted small">Points and minutes add up.</p>')+(r.noPm?'<p class="muted small">+/− is left out for this game: the score or the minutes changed, and it can’t be worked out again.</p>':'');
+}
+function seasonChanged(){if(!S.started)replan();save();render()}   // season catch-up may give different targets now
+function geSave(){
+  if(gameLive()){toast('Finish this game first, then correct saved games');return false}
+  const r=geRead();if(r.err){toast(r.err,0,0,5000);return false}
+  const se=seasonLoad(),i=se.games.findIndex(x=>x.id===r.g.id),ed=new Date().toISOString();
+  if(r.same&&!r.g.edited){ui.ge=null;ui.sheet='season';renderSheet();toast('Nothing changed');return true}
+  se.games[i]=r.same?{...r.base,ed}:{...r.rec,edited:true,ed,orig:r.base};
+  seasonSave(se);log('SEASON: '+r.rec.date+(r.rec.opp?' vs '+r.rec.opp:'')+(r.same?' put back as it was saved':' corrected'));
+  ui.ge=null;ui.sheet='season';seasonChanged();renderSheet();toast(r.same?'Same as first saved':'Saved');return true;
+}
+function geRevert(id){
+  if(gameLive())return false;
+  const se=seasonLoad(),i=se.games.findIndex(x=>x.id===id);if(i<0||!se.games[i].orig)return false;
+  const o=se.games[i].orig;se.games[i]={...o,ed:new Date().toISOString()};seasonSave(se);log('SEASON: '+o.date+(o.opp?' vs '+o.opp:'')+' put back as it was saved');
+  ui.ge=null;ui.sheet='season';seasonChanged();renderSheet();toast('Original put back');return true;
+}
+// players who can be added to a saved game: the squad, then anyone in another season game
+function geAddable(){
+  const have=new Set(ui.ge.rows.map(r=>r.p.num)),out=new Map();
+  S.roster.filter(p=>p.num!=null).forEach(p=>out.set(p.num,{num:p.num,name:p.name,tier:p.tier}));
+  seasonLoad().games.forEach(g=>g.players.forEach(p=>{if(p.num!=null&&!out.has(p.num))out.set(p.num,{num:p.num,name:p.name,tier:p.tier})}));
+  return [...out.values()].filter(p=>!have.has(p.num)).sort((a,b)=>a.num-b.num);
+}
+function geSet(k,v){   // a typed field: rows as mins.3, pts.3, fouls.3
+  if(!ui.ge)return;
+  if(k==='add'){const p=geAddable().find(x=>String(x.num)===String(v));if(!p)return;const g=seasonLoad().games.find(x=>x.id===ui.ge.id),o=g&&geBase(g).players.find(x=>x.num===p.num),q=o||{...p,tgt:0,fouls:0,mins:0,pts:0};   // taken out by mistake: back with what was saved
+    ui.ge.rows.push({p:q,mins:String(q.mins),pts:q.pts==null?'':String(q.pts),fouls:String(q.fouls||0)});ui.ge.rows.sort((a,b)=>(a.p.num??999)-(b.p.num??999));renderSheet();return}
+  const [f,i]=k.split('.');if(i!=null){if(ui.ge.rows[+i]&&['mins','pts','fouls'].includes(f))ui.ge.rows[+i][f]=String(v)}else if(['date','opp','us','them'].includes(f))ui.ge[f]=String(v);
+  const el=$('#geWarn');if(el)el.innerHTML=geWarn();
+}
+function geHtml(){
+  const d=ui.ge,g=seasonLoad().games.find(x=>x.id===d.id);if(!g)return '<h2>Correct a saved game</h2><button class="btn" data-act="sheet:season">Back</button>';
+  const add=geAddable();
+  return `<h2>Correct a saved game</h2><p class="muted small" style="margin-top:-6px">Minutes as 12:30 or 12.5. Targets stay as they were that day.${g.edited?' <b>This game was corrected before.</b>':''}</p>
+    <div class="grid2"><input class="inp" type="text" data-chg="ge:date" value="${esc(d.date)}" aria-label="Date"><input class="inp" type="text" data-chg="ge:opp" value="${esc(d.opp)}" placeholder="Opponent" aria-label="Opponent"></div>
+    <div class="grid2" style="margin-top:8px"><label class="small">${esc(tn())}<input class="inp" type="text" inputmode="numeric" data-chg="ge:us" value="${esc(d.us)}" aria-label="Our score"></label><label class="small">${esc(d.opp||'Opponent')}<input class="inp" type="text" inputmode="numeric" data-chg="ge:them" value="${esc(d.them)}" aria-label="Their score"></label></div>
+    <div class="gerow gehead"><span>Player</span><span>Min</span><span>Pts</span><span>Fouls</span><span></span></div>
+    ${d.rows.map((r,i)=>{const n='#'+(r.p.num??'?')+' '+r.p.name;return `<div class="gerow"><span class="gen"><b>#${esc(String(r.p.num??'?'))}</b> ${esc(r.p.name)}</span>${[['mins','text','Minutes'],['pts','numeric','Points'],['fouls','numeric','Fouls']].map(([f,im,l])=>`<input class="inp" type="text" inputmode="${im}" data-chg="ge:${f}.${i}" value="${esc(r[f])}" aria-label="${l}, ${esc(n)}">`).join('')}<button class="btn sm ghost" data-act="gedel:${i}" aria-label="Take ${esc(n)} out of this game">✕</button></div>`}).join('')}
+    ${add.length?`<select class="inp" data-chg="ge:add" style="margin-top:8px" aria-label="Add a player"><option value="">+ Add a player who played…</option>${add.map(p=>`<option value="${p.num}">#${p.num} ${esc(p.name)}</option>`).join('')}</select>`:''}
+    <div id="geWarn" style="margin-top:8px">${geWarn()}</div>
+    <div class="stack" style="margin-top:8px"><button class="btn pri" data-act="gesave">Save the corrections</button>${g.edited?`<button class="btn ${d.ask?'danger':''}" data-act="geback">${d.ask?'Tap again: lose the corrections':'Put the original back'}</button>`:''}<button class="btn ghost" data-act="sheet:season">Cancel</button></div>`;
+}
 // paste a game exported earlier (this app's CSV or WhatsApp summary)
 function importGame(text,date,opp,us,them){
   const players=[],lines=String(text||'').split(/\r?\n/);
@@ -1301,16 +1392,17 @@ function readBackup(text){
 // merge keeps every game already on this phone and adds the ones it doesn't have; squad=true also restores squad, tiers and settings
 function restoreBackup(text,squad){
   const o=readBackup(text);if(!o)return null;
-  const se=seasonLoad(),have=new Set(se.games.map(g=>g.id));let added=0;
-  o.season.games.forEach(g=>{if(g&&g.id&&Array.isArray(g.players)&&!have.has(g.id)){se.games.push(g);added++}});
+  const se=seasonLoad();let added=0,updated=0;
+  o.season.games.forEach(g=>{if(!g||!g.id||!Array.isArray(g.players))return;const i=se.games.findIndex(x=>x.id===g.id);
+    if(i<0){se.games.push(g);added++}else if((g.ed||'')>(se.games[i].ed||'')){se.games[i]=g;updated++}});   // a game corrected later than this phone's copy replaces it
   seasonSave(se);
   if(squad&&!S.started&&Array.isArray(o.roster)&&o.roster.length){
     S.roster=o.roster.map(p=>({...p,hot:false,cold:false}));S.roster.forEach(p=>st(p.id));
     S.config={...DEF_CFG,...o.config,tierMins:{...DEF_CFG.tierMins,...(o.config||{}).tierMins}};
     devApply();S.closersIds=(o.closersIds||[]).filter(id=>S.roster.some(p=>p.id===id));S.plan={};S.fixed={};S.applied={};S.halves={};S.pinned={};S.moves={};replan();
   }
-  log('BACKUP restored: '+added+' game'+(added===1?'':'s')+' added'+(squad?(S.started?' (squad not changed: game in progress)':' · squad and settings restored'):''),'rp');save();
-  return {added,squad:squad&&!S.started};
+  log('BACKUP restored: '+added+' game'+(added===1?'':'s')+' added'+(updated?', '+updated+' corrected':'')+(squad?(S.started?' (squad not changed: game in progress)':' · squad and settings restored'):''),'rp');save();
+  return {added,updated,squad:squad&&!S.started};
 }
 // Setup = squad + team + every setting, without the season: for a second device or an assistant coach
 function setupText(){
@@ -2012,7 +2104,7 @@ function viewLogs(){
     const behind=t.rows.filter(r=>r.fair==='short'||r.fair==='way');
     return head+`<p class="muted small">${t.games.length} game${t.games.length===1?'':'s'}${t.w+t.l?' · won '+t.w+', lost '+t.l:''} · minutes per game${t.rows.some(r=>r.np)?' · NP = not picked':''}</p>
     <div class="fair">${behind.length?'<b>Behind on minutes:</b> '+behind.map(r=>`<span class="trk ${r.fair}">#${r.num??'?'} ${esc(String(r.name).split(/\s+/).slice(-1)[0])} −${m1(-r.dt)}m over ${r.gt} game${r.gt===1?'':'s'}</span>`).join(' · ')+'<br><span class="muted small">Worth a word with them, or a bigger tier target next game.</span>':(t.rows.some(r=>r.gt)?'<span class="trk ok">Everyone is within a minute a game of their target.</span>':'')}</div>
-    <div class="tbl"><table class="ssn"><thead><tr><th>Player</th>${t.games.map(g=>`<th>${esc(String(g.date).slice(0,5))}<br><span class="muted small">${esc((g.opp||'').slice(0,8))}</span></th>`).join('')}<th>Total</th><th>Avg</th><th>vs target</th><th>+/−</th><th>Pts</th></tr></thead>
+    <div class="tbl"><table class="ssn"><thead><tr><th>Player</th>${t.games.map(g=>`<th>${esc(String(g.date).slice(0,5))}<br><span class="muted small">${esc((g.opp||'').slice(0,8))}${g.edited?' ✎':''}</span></th>`).join('')}<th>Total</th><th>Avg</th><th>vs target</th><th>+/−</th><th>Pts</th></tr></thead>
     <tbody>${t.rows.map(r=>`<tr><td><b>#${r.num??'?'}</b> ${esc(r.name)} <span class="tier t${r.tier}">T${r.tier}</span></td>${r.cells.map((c,gi)=>`<td>${c==null?`<span class="muted">${r.npc[gi]?'NP':'—'}</span>`:m1(c)}</td>`).join('')}<td><b>${m1(r.tot)}</b></td><td>${r.gp?m1(r.tot/r.gp):'—'}</td><td class="trk ${r.fair}">${r.gt?(r.dt>=0?'+':'−')+m1(Math.abs(r.dt)):'—'}</td><td>${r.pmg?(r.pm>0?'+':r.pm<0?'−':'')+Math.abs(r.pm):'—'}</td><td>${r.pts||'—'}</td></tr>`).join('')}</tbody></table></div>
     <div class="grid2" style="margin-top:8px"><button class="btn" data-act="copy:seasoncsv">Copy season CSV</button><button class="btn" data-act="copy:backup">💾 Copy season backup</button></div>
     <textarea id="seasoncsv" readonly style="position:absolute;left:-9999px;width:1px;height:1px">${esc(seasonCsv())}</textarea>
@@ -2103,9 +2195,12 @@ function renderSheet(){
     <div class="stack" style="margin-top:8px"><button class="btn pri" data-act="impgo">Add to season</button><button class="btn ghost" data-act="close">Cancel</button></div>`;
   }else if(ui.sheet==='season'){
     const se=seasonLoad();
-    h=`<h2>Season games</h2><div class="stack">${se.games.map(g=>`<div class="lcrow"><span class="lcl">${esc(g.date)}${g.opp?' vs '+esc(g.opp):''}${g.scored?' · '+g.us+'–'+g.them:''}${g.imported?' <span class="muted small">(added)</span>':''}</span><button class="btn sm danger" data-act="sgdel:${g.id}">Remove</button></div>`).join('')||'<p class="muted">No games yet.</p>'}</div>
+    h=`<h2>Season games</h2><div class="stack">${se.games.map(g=>`<div class="lcrow"><span class="lcl">${esc(g.date)}${g.opp?' vs '+esc(g.opp):''}${g.scored?' · '+g.us+'–'+g.them:''}${g.imported?' <span class="muted small">(added)</span>':''}${g.edited?' <span class="muted small">(edited)</span>':''}</span><button class="btn sm" data-act="sgedit:${g.id}" ${gameLive()?'disabled':''}>Edit</button><button class="btn sm danger" data-act="sgdel:${g.id}">Remove</button></div>`).join('')||'<p class="muted">No games yet.</p>'}</div>${gameLive()&&se.games.length?'<p class="note">Saved games can be corrected after this game.</p>':''}
     ${se.games.length?'<button class="btn danger" style="width:100%;margin-top:10px" data-act="sgclear">Clear the whole season</button>':''}
     <button class="btn ghost" style="width:100%;margin-top:8px" data-act="close">Close</button>`;
+  }else if(ui.sheet==='gedit'){
+    if(!ui.ge){ui.sheet=null;el.innerHTML='';return}
+    h=geHtml();
   }else if(ui.sheet==='sgclear'){
     h=`<h2>Clear the season?</h2><p class="muted">Removes every saved game from this phone. Copy the season CSV first if you want a record.</p><div class="stack"><button class="btn danger" data-act="sgclearyes">Yes, clear it</button><button class="btn ghost" data-act="close">Cancel</button></div>`;
   }else if(ui.sheet==='resync'){
@@ -2192,7 +2287,7 @@ function renderSheet(){
     <p class="muted small">If your phone still dims, set it to stay on while you coach: <b>iPhone</b> Settings → Display &amp; Brightness → Auto-Lock → Never. <b>Android</b> Settings → Display → Screen timeout → 10 or 30 minutes. Low Power / Battery Saver mode can also stop it, so turn that off for the game.</p>
     <div class="stack"><button class="btn pri" data-act="awaketry">Try again now</button><button class="btn ghost" data-act="close">Close</button></div>`;
   }else if(ui.sheet==='restore'){
-    h=`<h2>Restore from a backup</h2><p class="muted small">Paste the text that starts <b>PUMAS-BACKUP-1:</b>. It goes into <b>${esc(tfull())}</b>: games already here are kept; missing ones are added. A backup of a different team? Restore it as a new team.</p>
+    h=`<h2>Restore from a backup</h2><p class="muted small">Paste the text that starts <b>PUMAS-BACKUP-1:</b>. It goes into <b>${esc(tfull())}</b>: games already here are kept (a newer correction replaces the older copy); missing ones are added. A backup of a different team? Restore it as a new team.</p>
     <textarea id="rsText" placeholder="PUMAS-BACKUP-1:…" style="min-height:120px"></textarea>
     <div class="stack" style="margin-top:8px"><button class="btn pri" data-act="rsgo:0">Add the games</button><button class="btn" data-act="rsgo:1" ${S.started?'disabled':''}>Add the games + restore squad &amp; settings${S.started?' (after this game)':''}</button><button class="btn" data-act="rsgo:new" ${teamBusy()?'disabled':''}>Restore as a new team</button><button class="btn ghost" data-act="close">Cancel</button></div>`;
   }else if(ui.sheet==='focus'){
@@ -2296,7 +2391,7 @@ function chgMoveHtml(){
     <div class="grid2" style="margin-top:8px"><input id="chgv" type="text" inputmode="numeric" placeholder="went on at mm:ss" style="min-height:48px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:0 12px"><button class="btn" data-act="chgset">Move</button></div>
     <p class="note">Between ${mmss(L.hi)}${(()=>{const C=chgList(),p=C.length>1?C[C.length-2].c:len();return L.hi>=p-0.5?' ('+(C.length>1?'the change before':'start of '+qLabel(S.period))+')':''})()} and ${mmss(L.lo)}${L.lo<=S.clockSeconds+0.5?' (now)':''}.</p>`}
 /* ---------- debug trace: every engine action + what the app believed afterwards ---------- */
-const APP_VERSION='2.26.0 · 2026-11-18';
+const APP_VERSION='2.27.0 · 2026-11-25';
 let dbgDepth=0;
 function dbgInit(){S.debug={app:APP_VERSION,created:new Date().toISOString(),start:{config:JSON.parse(JSON.stringify(S.config)),roster:JSON.parse(JSON.stringify(S.roster)),closersIds:S.closersIds.slice(),periods:S.periods.slice(),focus:S.match.focus||null,scrim:S.match.scrim||0},ev:[]}}
 const ids2n=a=>(a||[]).map(id=>{const p=P(id);return p?p.num:id});
@@ -2427,7 +2522,7 @@ function act(a,e){
     case 'scorer':if(id==='-'){ui.askScorer=null;render()}else setScorer(id);if(ui.sheet==='score')renderSheet();break;
     case 'askdel':ui.sheet='delp';ui.sheetId=id;renderSheet();break;
     case 'rsgo':{const txt=($('#rsText')||{}).value;if(id==='new'){const b=readBackup(txt);if(!b||!Array.isArray(b.roster)||!b.roster.length){toast('That isn’t a backup from this app — copy it again from Logs → Season');break}if(!addTeam('',false)){toast('Finish this game first (full time or New match)');break}}
-      const r=restoreBackup(txt,id!=='0');if(!r){toast('That isn’t a backup from this app — copy it again from Logs → Season');break}ui.sheet=null;render();toast('Backup restored · '+r.added+' game'+(r.added===1?'':'s')+' added'+(r.squad?' · squad & settings restored':''));break}
+      const r=restoreBackup(txt,id!=='0');if(!r){toast('That isn’t a backup from this app — copy it again from Logs → Season');break}ui.sheet=null;render();toast('Backup restored · '+r.added+' game'+(r.added===1?'':'s')+' added'+(r.updated?' · '+r.updated+' corrected':'')+(r.squad?' · squad & settings restored':''));break}
     case 'gdhere':{const p=P(id);if(p){setActive(id,!p.active);if(!p.active)p.starter=false;ui.sheet='gameday';render()}break}
     case 'gdnp':{const p=P(id);if(p){setNotPicked(id,!p.np);ui.sheet='gameday';render()}break}
     case 'pg':{const G=pGroups();if(!G||S.started)break;const a=G.g[id],b=3-a,sel=ui.pgSel;
@@ -2449,6 +2544,10 @@ function act(a,e){
     case 'mins':adjMins(id,+v);renderSheet();break;
     case 'tft':addTeamFoulThem(+id);renderSheet();break;
     case 'impgo':{const n=importGame(($('#impText')||{}).value,($('#impDate')||{}).value,($('#impOpp')||{}).value,($('#impUs')||{}).value,($('#impThem')||{}).value);if(!n){toast('Couldn’t read that — paste the CSV or WhatsApp summary from this app');break}ui.sheet=null;render();toast('Added '+n+' players to the season');break}
+    case 'sgedit':geOpen(id);break;
+    case 'gesave':geSave();break;
+    case 'geback':if(ui.ge){if(ui.ge.ask)geRevert(ui.ge.id);else{ui.ge.ask=true;renderSheet()}}break;
+    case 'gedel':if(ui.ge){ui.ge.rows.splice(+id,1);renderSheet()}break;
     case 'sgdel':removeSeasonGame(id);renderSheet();break;
     case 'sgclear':ui.sheet='sgclear';renderSheet();break;
     case 'sgclearyes':clearSeason();ui.sheet=null;render();toast('Season cleared');break;
@@ -2523,6 +2622,7 @@ document.addEventListener('click',e=>{
 document.addEventListener('input',e=>{const f=e.target.dataset&&e.target.dataset.flt;if(!f)return;const q=e.target.value.trim().toLowerCase();document.querySelectorAll(f).forEach(r=>r.hidden=!!q&&!r.textContent.toLowerCase().includes(q))});
 document.addEventListener('change',e=>{
   const c=e.target.dataset.chg;if(!c)return;const [k,id]=c.split(':'),v=e.target.value;
+  if(k==='ge'){geSet(id,v);return}   // a saved game being corrected: nothing changes until it's saved
   if(k==='opp')S.match.opp=v;else if(k==='date')S.match.date=v;
   else if(k==='note')S.match.note=v.trim().slice(0,140);
   else if(k==='capt'){S.roster.forEach(p=>{p.capt=p.id===v});render()}   // one captain per team
