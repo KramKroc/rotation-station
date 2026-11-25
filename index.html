@@ -1283,13 +1283,22 @@ const overNow=()=>S.started&&(S.finished||S.clockSeconds<=0&&S.period>=S.periods
 const gameLive=()=>S.started&&!S.finished&&!(S.archived&&overNow());   // saved at the end with "Save this game" counts as over
 const geKey=p=>p.num!=null?'#'+p.num:p.name;
 function geBase(g){const {edited,ed,orig,...b}=g;return orig||b}
-function geMins(v){v=String(v).trim().replace(',','.');const m=v.match(/^(\d{1,3}):([0-5]\d)$/);const x=m?(+m[1]*60+ +m[2])/60:/^\d{1,3}(\.\d+)?$/.test(v)?+v:NaN;return x<=200?Math.round(x*10)/10:NaN}
+// minutes are typed and shown as min:sec, to the second. 16:35, 16.35, 16,35 and 1635 are all 16:35 (a scoresheet's dot is a colon);
+// one figure after the dot is a decimal (16.5 = 16:30). Anything else isn't a time.
+function geMins(v){
+  v=String(v).trim();let m,sec=NaN;
+  if(m=v.match(/^(\d{1,3})[:.,](\d\d)$/)||v.match(/^(\d{1,2})(\d\d)$/)){if(+m[2]<60)sec=+m[1]*60+ +m[2]}
+  else if(m=v.match(/^(\d{1,3})[.,](\d)$/))sec=+m[1]*60+ +m[2]*6;
+  else if(/^\d{1,2}$/.test(v))sec=+v*60;
+  return sec<=200*60?Math.round(sec/60*1000)/1000:NaN;
+}
+const geMs=x=>{const t=Math.round(x*60);return Math.floor(t/60)+':'+String(t%60).padStart(2,'0')};
 const geInt=(v,max)=>/^\d{1,3}$/.test(String(v).trim())&&+v<=max?+v:NaN;
 function geOpen(id){
   if(gameLive()){toast('Finish this game first, then correct saved games');return false}
   const g=seasonLoad().games.find(x=>x.id===id);if(!g)return false;
   ui.ge={id,ask:false,date:String(g.date||''),opp:g.opp||'',us:g.scored?String(g.us):'',them:g.scored?String(g.them):'',
-    rows:g.players.map(p=>({p,mins:String(p.mins),pts:p.pts==null?'':String(p.pts),fouls:String(p.fouls||0)})).sort((a,b)=>(a.p.num??999)-(b.p.num??999))};
+    rows:g.players.map(p=>({p,mins:geMs(p.mins),pts:p.pts==null?'':String(p.pts),fouls:String(p.fouls||0)})).sort((a,b)=>(a.p.num??999)-(b.p.num??999))};
   ui.sheet='gedit';renderSheet();return true;
 }
 // the typed values as a game record, or {err}
@@ -1300,8 +1309,8 @@ function geRead(){
   if(isNaN(us)||isNaN(them))return {err:'Check the score: both need a whole number'};
   if(!d.rows.length)return {err:'A game needs at least one player'};
   for(const r of d.rows){
-    const nm='#'+(r.p.num??'?')+' '+r.p.name,mins=r.mins===String(r.p.mins)?+r.p.mins:geMins(r.mins),fouls=geInt(r.fouls===''?0:r.fouls,9),pts=String(r.pts).trim()===''?null:geInt(r.pts,200);
-    if(isNaN(mins))return {err:nm+': minutes as 12:30 or 12.5'};
+    const nm='#'+(r.p.num??'?')+' '+r.p.name,mins=r.mins===geMs(r.p.mins)?+r.p.mins:geMins(r.mins),fouls=geInt(r.fouls===''?0:r.fouls,9),pts=String(r.pts).trim()===''?null:geInt(r.pts,200);
+    if(isNaN(mins))return {err:nm+': minutes as min:sec, like 12:30'};
     if(isNaN(fouls))return {err:nm+': check the fouls'};
     if(pts!==null&&isNaN(pts))return {err:nm+': check the points'};
     const o=was.get(geKey(r.p)),{pm,...rest}=r.p,n={...rest,mins,fouls};if(pts===null)delete n.pts;else n.pts=pts;
@@ -1320,9 +1329,9 @@ function geWarn(){
   const r=geRead();if(r.err)return `<p class="lowcore small">${esc(r.err)}</p>`;
   const w=[],k=r.rec;
   if(k.scored&&k.players.some(p=>p.pts!=null)&&r.pts!==k.us)w.push(r.pts<k.us?`Player points add up to ${r.pts}, our score is ${k.us}: ${k.us-r.pts} with no scorer.`:`Player points add up to ${r.pts}, more than our score of ${k.us}.`);
-  if(Math.abs(r.tot-r.tot0)>=1)w.push(`Minutes add up to ${m1(r.tot)}; the game was saved with ${m1(r.tot0)}.`);
+  if(Math.abs(r.tot-r.tot0)>=1)w.push(`Minutes add up to ${geMs(r.tot)}; the game was first saved with ${geMs(r.tot0)}.`);
   if(k.players.some(p=>p.fouls>5))w.push('Someone has more than 5 fouls.');
-  return (w.length?w.map(x=>`<p class="lowcore small">${x}</p>`).join(''):'<p class="muted small">Points and minutes add up.</p>')+(r.noPm?'<p class="muted small">+/− is left out for this game: the score or the minutes changed, and it can’t be worked out again.</p>':'');
+  return (w.length?w.map(x=>`<p class="lowcore small">${x}</p>`).join(''):'<p class="muted small">Points and minutes add up.</p>')+`<p class="muted small">Minutes in total: <b>${geMs(r.tot)}</b></p>`+(r.noPm?'<p class="muted small">+/− is left out for this game: the score or the minutes changed, and it can’t be worked out again.</p>':'');
 }
 function seasonChanged(){if(!S.started)replan();save();render()}   // season catch-up may give different targets now
 function geSave(){
@@ -1350,18 +1359,19 @@ function geAddable(){
 function geSet(k,v){   // a typed field: rows as mins.3, pts.3, fouls.3
   if(!ui.ge)return;
   if(k==='add'){const p=geAddable().find(x=>String(x.num)===String(v));if(!p)return;const g=seasonLoad().games.find(x=>x.id===ui.ge.id),o=g&&geBase(g).players.find(x=>x.num===p.num),q=o||{...p,tgt:0,fouls:0,mins:0,pts:0};   // taken out by mistake: back with what was saved
-    ui.ge.rows.push({p:q,mins:String(q.mins),pts:q.pts==null?'':String(q.pts),fouls:String(q.fouls||0)});ui.ge.rows.sort((a,b)=>(a.p.num??999)-(b.p.num??999));renderSheet();return}
-  const [f,i]=k.split('.');if(i!=null){if(ui.ge.rows[+i]&&['mins','pts','fouls'].includes(f))ui.ge.rows[+i][f]=String(v)}else if(['date','opp','us','them'].includes(f))ui.ge[f]=String(v);
+    ui.ge.rows.push({p:q,mins:geMs(q.mins),pts:q.pts==null?'':String(q.pts),fouls:String(q.fouls||0)});ui.ge.rows.sort((a,b)=>(a.p.num??999)-(b.p.num??999));renderSheet();return}
+  const [f,i]=k.split('.');if(i!=null){if(ui.ge.rows[+i]&&['mins','pts','fouls'].includes(f)){if(f==='mins'){const x=geMins(v);if(!isNaN(x))v=geMs(x)}ui.ge.rows[+i][f]=String(v)}}else if(['date','opp','us','them'].includes(f))ui.ge[f]=String(v);
   const el=$('#geWarn');if(el)el.innerHTML=geWarn();
+  return String(v);   // a time as it was read, so the box can show it
 }
 function geHtml(){
   const d=ui.ge,g=seasonLoad().games.find(x=>x.id===d.id);if(!g)return '<h2>Correct a saved game</h2><button class="btn" data-act="sheet:season">Back</button>';
   const add=geAddable();
-  return `<h2>Correct a saved game</h2><p class="muted small" style="margin-top:-6px">Minutes as 12:30 or 12.5. Targets stay as they were that day.${g.edited?' <b>This game was corrected before.</b>':''}</p>
+  return `<h2>Correct a saved game</h2><p class="muted small" style="margin-top:-6px">Minutes as min:sec (type 12:30 or 1230). Targets stay as they were that day.${g.edited?' <b>This game was corrected before.</b>':''}</p>
     <div class="grid2"><input class="inp" type="text" data-chg="ge:date" value="${esc(d.date)}" aria-label="Date"><input class="inp" type="text" data-chg="ge:opp" value="${esc(d.opp)}" placeholder="Opponent" aria-label="Opponent"></div>
     <div class="grid2" style="margin-top:8px"><label class="small">${esc(tn())}<input class="inp" type="text" inputmode="numeric" data-chg="ge:us" value="${esc(d.us)}" aria-label="Our score"></label><label class="small">${esc(d.opp||'Opponent')}<input class="inp" type="text" inputmode="numeric" data-chg="ge:them" value="${esc(d.them)}" aria-label="Their score"></label></div>
     <div class="gerow gehead"><span>Player</span><span>Min</span><span>Pts</span><span>Fouls</span><span></span></div>
-    ${d.rows.map((r,i)=>{const n='#'+(r.p.num??'?')+' '+r.p.name;return `<div class="gerow"><span class="gen"><b>#${esc(String(r.p.num??'?'))}</b> ${esc(r.p.name)}</span>${[['mins','text','Minutes'],['pts','numeric','Points'],['fouls','numeric','Fouls']].map(([f,im,l])=>`<input class="inp" type="text" inputmode="${im}" data-chg="ge:${f}.${i}" value="${esc(r[f])}" aria-label="${l}, ${esc(n)}">`).join('')}<button class="btn sm ghost" data-act="gedel:${i}" aria-label="Take ${esc(n)} out of this game">✕</button></div>`}).join('')}
+    ${d.rows.map((r,i)=>{const n='#'+(r.p.num??'?')+' '+r.p.name;return `<div class="gerow"><span class="gen"><b>#${esc(String(r.p.num??'?'))}</b> ${esc(r.p.name)}</span>${[['mins','decimal','Minutes, min:sec'],['pts','numeric','Points'],['fouls','numeric','Fouls']].map(([f,im,l])=>`<input class="inp" type="text" inputmode="${im}" data-chg="ge:${f}.${i}" value="${esc(r[f])}" aria-label="${l}, ${esc(n)}">`).join('')}<button class="btn sm ghost" data-act="gedel:${i}" aria-label="Take ${esc(n)} out of this game">✕</button></div>`}).join('')}
     ${add.length?`<select class="inp" data-chg="ge:add" style="margin-top:8px" aria-label="Add a player"><option value="">+ Add a player who played…</option>${add.map(p=>`<option value="${p.num}">#${p.num} ${esc(p.name)}</option>`).join('')}</select>`:''}
     <div id="geWarn" style="margin-top:8px">${geWarn()}</div>
     <div class="stack" style="margin-top:8px"><button class="btn pri" data-act="gesave">Save the corrections</button>${g.edited?`<button class="btn ${d.ask?'danger':''}" data-act="geback">${d.ask?'Tap again: lose the corrections':'Put the original back'}</button>`:''}<button class="btn ghost" data-act="sheet:season">Cancel</button></div>`;
@@ -1505,7 +1515,7 @@ function seasonTable(){
 function seasonCsv(){
   const t=seasonTable();if(!t)return '';
   let out='Jersey,Name,Tier,'+t.games.map(x=>'"'+x.date+(x.opp?' vs '+x.opp:'')+'"').join(',')+',Total_Mins,Games,Avg_Mins,Target_Total,Vs_Target,Not_Picked\n';
-  t.rows.forEach(r=>{out+=[r.num,'"'+r.name.replace(/"/g,'""')+'"',r.tier,...r.cells.map((c,gi)=>c==null?(r.npc[gi]?'NP':''):c),m1(r.tot),r.gp,r.gp?m1(r.tot/r.gp):'',m1(r.tgt),r.gt?m1(r.dt):'',r.np].join(',')+'\n'});
+  t.rows.forEach(r=>{out+=[r.num,'"'+r.name.replace(/"/g,'""')+'"',r.tier,...r.cells.map((c,gi)=>c==null?(r.npc[gi]?'NP':''):Math.round(c*10)/10),m1(r.tot),r.gp,r.gp?m1(r.tot/r.gp):'',m1(r.tgt),r.gt?m1(r.dt):'',r.np].join(',')+'\n'});
   return out;
 }
 
@@ -2470,7 +2480,7 @@ function chgMoveHtml(){
     <div class="grid2" style="margin-top:8px"><input id="chgv" type="text" inputmode="numeric" placeholder="went on at mm:ss" style="min-height:48px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:0 12px"><button class="btn" data-act="chgset">Move</button></div>
     <p class="note">Between ${mmss(L.hi)}${(()=>{const C=chgList(),p=C.length>1?C[C.length-2].c:len();return L.hi>=p-0.5?' ('+(C.length>1?'the change before':'start of '+qLabel(S.period))+')':''})()} and ${mmss(L.lo)}${L.lo<=S.clockSeconds+0.5?' (now)':''}.</p>`}
 /* ---------- debug trace: every engine action + what the app believed afterwards ---------- */
-const APP_VERSION='2.28.0 · 2026-11-25';
+const APP_VERSION='2.28.1 · 2026-11-25';
 let dbgDepth=0;
 function dbgInit(){S.debug={app:APP_VERSION,created:new Date().toISOString(),start:{config:JSON.parse(JSON.stringify(S.config)),roster:JSON.parse(JSON.stringify(S.roster)),closersIds:S.closersIds.slice(),periods:S.periods.slice(),focus:S.match.focus||null,scrim:S.match.scrim||0,owed:JSON.parse(JSON.stringify(seasonOwed()))},ev:[]}}
 const ids2n=a=>(a||[]).map(id=>{const p=P(id);return p?p.num:id});
@@ -2709,7 +2719,7 @@ document.addEventListener('change',e=>{
   const c=e.target.dataset.chg;if(!c)return;const [k,id]=c.split(':'),v=e.target.value;
   if(k==='ft'){ftSet(id,v);return}
   if(k==='ftby'){if(v){ftScorer(id,v);renderSheet()}return}
-  if(k==='ge'){geSet(id,v);return}   // a saved game being corrected: nothing changes until it's saved
+  if(k==='ge'){const r=geSet(id,v);if(r!=null&&r!==v)e.target.value=r;return}   // a saved game being corrected: nothing changes until it's saved
   if(k==='opp')S.match.opp=v;else if(k==='date')S.match.date=v;
   else if(k==='note')S.match.note=v.trim().slice(0,140);
   else if(k==='capt'){S.roster.forEach(p=>{p.capt=p.id===v});render()}   // one captain per team
